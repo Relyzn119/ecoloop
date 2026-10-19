@@ -148,7 +148,7 @@ class NotificationService
             ."Address for pickup: Supermarket Hub Central\n\n"
             ."Thank you for partnering with us to eliminate food waste and support the community.\n\n"
             ."Warm regards,\n"
-            ."EcoLoop Agent Team",
+            .'EcoLoop Agent Team',
             $partner->contact_person,
             $partner->name,
             $product->name,
