@@ -226,9 +226,7 @@ async function quickDiscount(productId: number) {
             <!-- Quick Action Bar & Agent Status Banner -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-3xl">
-                        Circular Economy Dashboard
-                    </h1>
+                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-3xl">Circular Economy Dashboard</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
                         AI-driven shelf-life forecasting, dynamic markdown clearing, and food waste reduction metrics.
                     </p>
@@ -289,7 +287,9 @@ async function quickDiscount(productId: number) {
                         </span>
                         <Link href="/inventory" class="text-muted-foreground hover:text-foreground">View all &rarr;</Link>
                     </div>
-                    <div class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-amber-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100" />
+                    <div
+                        class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-amber-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100"
+                    />
                 </div>
 
                 <!-- 2. Food Waste Prevented -->
@@ -314,7 +314,9 @@ async function quickDiscount(productId: number) {
                         </span>
                         <span class="text-muted-foreground">100% Organics Target</span>
                     </div>
-                    <div class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-emerald-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100" />
+                    <div
+                        class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-emerald-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100"
+                    />
                 </div>
 
                 <!-- 3. Financial Loss Prevented (in IDR) -->
@@ -333,12 +335,12 @@ async function quickDiscount(productId: number) {
                         </div>
                     </div>
                     <div class="mt-4 flex items-center justify-between text-xs">
-                        <span class="font-medium text-blue-600 dark:text-blue-400">
-                            Via Dynamic Markdowns &amp; Rescue
-                        </span>
+                        <span class="font-medium text-blue-600 dark:text-blue-400"> Via Dynamic Markdowns &amp; Rescue </span>
                         <span class="text-muted-foreground">IDR Equiv.</span>
                     </div>
-                    <div class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-blue-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100" />
+                    <div
+                        class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-blue-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100"
+                    />
                 </div>
 
                 <!-- 4. CO2 Emission Reduced -->
@@ -357,12 +359,12 @@ async function quickDiscount(productId: number) {
                         </div>
                     </div>
                     <div class="mt-4 flex items-center justify-between text-xs">
-                        <span class="font-medium text-teal-600 dark:text-teal-400">
-                            2.5 kg CO2e / kg food factor
-                        </span>
+                        <span class="font-medium text-teal-600 dark:text-teal-400"> 2.5 kg CO2e / kg food factor </span>
                         <span class="text-muted-foreground">EPA Standard</span>
                     </div>
-                    <div class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-teal-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100" />
+                    <div
+                        class="pointer-events-none absolute -right-6 -top-6 size-24 rounded-full bg-teal-500/10 opacity-0 blur-2xl transition-opacity group-hover:opacity-100"
+                    />
                 </div>
             </div>
 
@@ -376,9 +378,7 @@ async function quickDiscount(productId: number) {
                                 <AlertTriangle class="size-4" />
                             </div>
                             <div>
-                                <h3 class="text-base font-semibold leading-tight text-neutral-900 dark:text-neutral-100">
-                                    Urgent Clearance Items
-                                </h3>
+                                <h3 class="text-base font-semibold leading-tight text-neutral-900 dark:text-neutral-100">Urgent Clearance Items</h3>
                                 <p class="text-xs text-muted-foreground">Products expiring in 1–3 days requiring AI markdown or donation</p>
                             </div>
                         </div>
@@ -393,7 +393,7 @@ async function quickDiscount(productId: number) {
                     </div>
 
                     <!-- Table of Urgent Items -->
-                    <div class="overflow-x-auto flex-1">
+                    <div class="flex-1 overflow-x-auto">
                         <table class="w-full text-left text-sm">
                             <thead class="border-b border-sidebar-border/60 bg-muted/40 text-xs font-medium text-muted-foreground">
                                 <tr>
@@ -407,35 +407,25 @@ async function quickDiscount(productId: number) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-sidebar-border/60">
-                                <tr
-                                    v-for="item in urgent_products"
-                                    :key="item.id"
-                                    class="transition-colors hover:bg-muted/30"
-                                >
+                                <tr v-for="item in urgent_products" :key="item.id" class="transition-colors hover:bg-muted/30">
                                     <td class="px-6 py-3.5">
                                         <p class="font-medium text-neutral-900 dark:text-neutral-100">{{ item.name }}</p>
-                                        <p class="text-xs font-mono text-muted-foreground">{{ item.sku }}</p>
+                                        <p class="font-mono text-xs text-muted-foreground">{{ item.sku }}</p>
                                     </td>
                                     <td class="px-4 py-3.5">
                                         <span class="inline-flex rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                                             {{ item.category }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3.5 font-medium">
-                                        {{ item.quantity }} {{ item.unit }}
-                                    </td>
+                                    <td class="px-4 py-3.5 font-medium">{{ item.quantity }} {{ item.unit }}</td>
                                     <td class="px-4 py-3.5">
                                         <div v-if="item.discount_price" class="flex flex-col">
                                             <span class="font-semibold text-emerald-600 dark:text-emerald-400">
                                                 ${{ item.discount_price.toFixed(2) }}
                                             </span>
-                                            <span class="text-xs text-muted-foreground line-through">
-                                                ${{ item.original_price.toFixed(2) }}
-                                            </span>
+                                            <span class="text-xs text-muted-foreground line-through"> ${{ item.original_price.toFixed(2) }} </span>
                                         </div>
-                                        <span v-else class="font-medium">
-                                            ${{ item.original_price.toFixed(2) }}
-                                        </span>
+                                        <span v-else class="font-medium"> ${{ item.original_price.toFixed(2) }} </span>
                                     </td>
                                     <td class="px-4 py-3.5">
                                         <span
@@ -495,9 +485,7 @@ async function quickDiscount(productId: number) {
                                 <Bot class="size-4" />
                             </div>
                             <div>
-                                <h3 class="text-base font-semibold leading-tight text-neutral-900 dark:text-neutral-100">
-                                    Agent Activity Feed
-                                </h3>
+                                <h3 class="text-base font-semibold leading-tight text-neutral-900 dark:text-neutral-100">Agent Activity Feed</h3>
                                 <p class="text-xs text-muted-foreground">Autonomous decision stream</p>
                             </div>
                         </div>
@@ -509,7 +497,7 @@ async function quickDiscount(productId: number) {
                     </div>
 
                     <!-- Logs List -->
-                    <div class="divide-y divide-sidebar-border/60 p-4 space-y-3.5 flex-1 overflow-y-auto max-h-[520px]">
+                    <div class="max-h-[520px] flex-1 space-y-3.5 divide-y divide-sidebar-border/60 overflow-y-auto p-4">
                         <div
                             v-for="log in recent_agent_logs"
                             :key="log.id"
@@ -571,11 +559,8 @@ async function quickDiscount(productId: number) {
                         </div>
                     </div>
 
-                    <div class="border-t border-sidebar-border/80 p-3 bg-muted/20 rounded-b-2xl text-center">
-                        <Link
-                            href="/agent-logs"
-                            class="text-xs font-medium text-muted-foreground hover:text-foreground transition"
-                        >
+                    <div class="rounded-b-2xl border-t border-sidebar-border/80 bg-muted/20 p-3 text-center">
+                        <Link href="/agent-logs" class="text-xs font-medium text-muted-foreground transition hover:text-foreground">
                             View full audit log stream &rarr;
                         </Link>
                     </div>

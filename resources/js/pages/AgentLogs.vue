@@ -22,14 +22,16 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
                 <button
                     type="button"
-                    class="inline-flex items-center gap-2 rounded-lg border border-sidebar-border/80 bg-card px-3.5 py-2 text-sm font-medium hover:bg-muted transition"
+                    class="inline-flex items-center gap-2 rounded-lg border border-sidebar-border/80 bg-card px-3.5 py-2 text-sm font-medium transition hover:bg-muted"
                 >
                     <RefreshCw class="size-4" />
                     <span>Refresh Stream</span>
                 </button>
             </div>
 
-            <div class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-sidebar-border/80 bg-card/50 p-12 text-center">
+            <div
+                class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-sidebar-border/80 bg-card/50 p-12 text-center"
+            >
                 <div class="rounded-full bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
                     <Bot class="size-8" />
                 </div>

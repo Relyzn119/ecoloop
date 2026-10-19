@@ -22,14 +22,16 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
                 <button
                     type="button"
-                    class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition"
+                    class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700"
                 >
                     <UserPlus class="size-4" />
                     <span>Register Partner</span>
                 </button>
             </div>
 
-            <div class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-sidebar-border/80 bg-card/50 p-12 text-center">
+            <div
+                class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-sidebar-border/80 bg-card/50 p-12 text-center"
+            >
                 <div class="rounded-full bg-violet-500/10 p-4 text-violet-600 dark:text-violet-400">
                     <Handshake class="size-8" />
                 </div>

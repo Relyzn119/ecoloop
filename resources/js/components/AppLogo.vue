@@ -16,5 +16,4 @@ defineProps<Props>();
         <span class="mb-0.5 truncate font-semibold leading-none">EcoLoop Agent</span>
         <span class="truncate text-xs text-muted-foreground">Circular Economy Platform</span>
     </div>
-
 </template>
