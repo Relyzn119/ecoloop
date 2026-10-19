@@ -27,9 +27,9 @@ class DashboardController extends Controller
         $today = now()->toDateString();
         $sevenDays = now()->addDays(7)->toDateString();
 
-        // 1. Total expiring soon (<= 7 days)
+        // 1. Total expiring soon (<= 7 days, active products)
         $totalExpiringSoon = Product::query()
-            ->whereIn('status', ['active', 'discounted'])
+            ->where('status', 'active')
             ->whereDate('expiration_date', '>=', $today)
             ->whereDate('expiration_date', '<=', $sevenDays)
             ->count();
@@ -56,13 +56,29 @@ class DashboardController extends Controller
         // 4. CO2 emission reduction (EPA benchmark: 2.5 kg CO2e per 1 kg food waste diverted from landfill)
         $co2EmissionReducedKg = round($foodSavedKg * 2.5, 1);
 
-        // 5. Recent Agent Logs (Latest 5 records with product and category)
-        $recentAgentLogs = AgentLog::query()
+        // 5. Recent Agent Logs (Latest 5 records with product and partner relationships)
+        $rawLogs = AgentLog::query()
             ->with(['product.category'])
             ->latest('id')
             ->limit(5)
+            ->get();
+
+        $partnerIds = $rawLogs
+            ->map(fn (AgentLog $log) => $log->payload['partner_id'] ?? null)
+            ->filter()
+            ->unique();
+
+        $partners = DonationPartner::query()
+            ->whereIn('id', $partnerIds)
             ->get()
-            ->map(fn (AgentLog $log) => [
+            ->keyBy('id');
+
+        $recentAgentLogs = $rawLogs->map(function (AgentLog $log) use ($partners) {
+            $partnerId = $log->payload['partner_id'] ?? null;
+            $partner = $partnerId && isset($partners[$partnerId]) ? $partners[$partnerId] : null;
+            $partnerName = $partner?->name ?? ($log->payload['partner_name'] ?? ($log->payload['partner'] ?? ($log->payload['recipient'] ?? null)));
+
+            return [
                 'id' => $log->id,
                 'action_type' => $log->action_type,
                 'reasoning' => $log->reasoning,
@@ -76,8 +92,15 @@ class DashboardController extends Controller
                     'sku' => $log->product->sku,
                     'category' => $log->product->category?->name ?? 'General',
                 ] : null,
-                'partner_name' => $log->payload['partner_name'] ?? ($log->payload['partner'] ?? ($log->payload['recipient'] ?? null)),
-            ]);
+                'partner' => $partner ? [
+                    'id' => $partner->id,
+                    'name' => $partner->name,
+                    'email' => $partner->email,
+                    'phone' => $partner->phone,
+                ] : null,
+                'partner_name' => $partnerName,
+            ];
+        });
 
         // 6. Urgent Items (expiring in <= 3 days)
         $urgentProducts = Product::query()

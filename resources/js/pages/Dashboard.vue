@@ -63,6 +63,12 @@ interface AgentLogItem {
         sku: string;
         category: string;
     } | null;
+    partner?: {
+        id: number;
+        name: string;
+        email?: string;
+        phone?: string;
+    } | null;
     partner_name?: string | null;
 }
 
@@ -240,7 +246,7 @@ async function quickDiscount(productId: number) {
                         class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                     >
                         <RefreshCw class="size-4" :class="{ 'animate-spin': isScanning }" />
-                        <span>{{ isScanning ? 'Evaluating Shelf-Life...' : 'Trigger AI Scan' }}</span>
+                        <span>{{ isScanning ? 'Evaluating Shelf-Life...' : 'Trigger AI Scan (Mock/Live)' }}</span>
                     </button>
 
                     <Link
@@ -249,7 +255,7 @@ async function quickDiscount(productId: number) {
                         class="inline-flex items-center gap-2 rounded-lg border border-sidebar-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent"
                     >
                         <Package class="size-4 text-muted-foreground" />
-                        <span>Expiring Products</span>
+                        <span>View Expiring Products</span>
                     </Link>
 
                     <Link
@@ -257,7 +263,7 @@ async function quickDiscount(productId: number) {
                         class="inline-flex items-center gap-1.5 rounded-lg border border-sidebar-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground shadow-sm transition hover:bg-accent"
                     >
                         <Plus class="size-4 text-muted-foreground" />
-                        <span>Add Stock</span>
+                        <span>Add New Inventory</span>
                     </Link>
                 </div>
             </div>
