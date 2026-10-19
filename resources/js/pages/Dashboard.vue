@@ -3,7 +3,6 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
-    Activity,
     AlertCircle,
     AlertTriangle,
     ArrowUpRight,
@@ -13,12 +12,10 @@ import {
     Coins,
     ExternalLink,
     Handshake,
-    Info,
     Leaf,
     Package,
     Plus,
     RefreshCw,
-    ScrollText,
     Sparkles,
     Tag,
     X,
@@ -79,7 +76,7 @@ interface Props {
     mock_ai_enabled: boolean;
 }
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
