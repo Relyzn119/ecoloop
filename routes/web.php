@@ -30,8 +30,5 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('donation-partners');
 });
 
-// Backward-compatible alias for route('inventory')
-Route::get('inventory', [ProductController::class, 'index'])->name('inventory')->middleware(['auth', 'verified']);
-
 require __DIR__.'/settings.php';
 require __DIR__.'/auth.php';
