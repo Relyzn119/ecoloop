@@ -19,6 +19,7 @@ class AgentLog extends Model
      */
     protected $fillable = [
         'product_id',
+        'partner_id',
         'action_type',
         'reasoning',
         'payload',
@@ -45,5 +46,15 @@ class AgentLog extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * Get the donation partner associated with this action.
+     *
+     * @return BelongsTo<DonationPartner, $this>
+     */
+    public function partner(): BelongsTo
+    {
+        return $this->belongsTo(DonationPartner::class);
     }
 }

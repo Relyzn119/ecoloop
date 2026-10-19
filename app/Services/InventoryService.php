@@ -108,6 +108,7 @@ class InventoryService
 
             AgentLog::create([
                 'product_id' => $product->id,
+                'partner_id' => $partner->id,
                 'action_type' => 'donation_requested',
                 'reasoning' => $reason,
                 'payload' => [

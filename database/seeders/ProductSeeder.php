@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\AgentLog;
 use App\Models\Category;
+use App\Models\DonationPartner;
 use App\Models\Product;
 use Illuminate\Database\Seeder;
 
@@ -329,8 +330,16 @@ class ProductSeeder extends Seeder
             );
 
             if ($agentAction) {
+                $partnerId = null;
+                if (!empty($agentAction['payload']['partner_id'])) {
+                    $partnerId = $agentAction['payload']['partner_id'];
+                } elseif (!empty($agentAction['payload']['recipient'])) {
+                    $partnerId = DonationPartner::where('name', $agentAction['payload']['recipient'])->value('id');
+                }
+
                 AgentLog::create(array_merge($agentAction, [
                     'product_id' => $product->id,
+                    'partner_id' => $partnerId,
                 ]));
             }
         }

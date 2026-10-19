@@ -20,6 +20,7 @@ class AgentLogFactory extends Factory
     {
         return [
             'product_id' => Product::factory(),
+            'partner_id' => null,
             'action_type' => fake()->randomElement(['discount_applied', 'donation_requested', 'alert_sent', 'manual_override']),
             'reasoning' => fake()->paragraph(),
             'payload' => [
@@ -29,5 +30,16 @@ class AgentLogFactory extends Factory
             ],
             'status' => 'success',
         ];
+    }
+
+    /**
+     * Indicate that the log is for a donation request.
+     */
+    public function forDonation(?\App\Models\DonationPartner $partner = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'action_type' => 'donation_requested',
+            'partner_id' => $partner?->id ?? \App\Models\DonationPartner::factory(),
+        ]);
     }
 }

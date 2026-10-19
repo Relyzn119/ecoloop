@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('agent_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('product_id')->nullable()->constrained('products')->nullOnDelete();
+            $table->foreignId('partner_id')->nullable()->constrained('donation_partners')->nullOnDelete();
             $table->enum('action_type', ['discount_applied', 'donation_requested', 'alert_sent', 'manual_override'])->index();
             $table->text('reasoning');
             $table->json('payload');

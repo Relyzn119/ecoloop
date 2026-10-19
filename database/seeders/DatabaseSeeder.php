@@ -25,8 +25,8 @@ class DatabaseSeeder extends Seeder
 
         // Core Domain Seeders
         $this->call([
-            ProductSeeder::class,
             DonationPartnerSeeder::class,
+            ProductSeeder::class,
         ]);
 
         // General System Agent Log
