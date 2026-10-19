@@ -45,4 +45,8 @@ return [
         'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
     ],
 
+    'n8n' => [
+        'webhook_url' => env('N8N_WEBHOOK_URL'),
+    ],
+
 ];

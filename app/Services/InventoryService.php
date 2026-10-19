@@ -11,6 +11,13 @@ use InvalidArgumentException;
 
 class InventoryService
 {
+    protected NotificationService $notificationService;
+
+    public function __construct(?NotificationService $notificationService = null)
+    {
+        $this->notificationService = $notificationService ?? app(NotificationService::class);
+    }
+
     /**
      * Retrieve active products expiring within the specified days threshold.
      *
@@ -115,6 +122,9 @@ class InventoryService
                 ],
                 'status' => 'success',
             ]);
+
+            // Dispatch external notification alert (WhatsApp/Email/n8n webhook)
+            $this->notificationService->sendDonationAlert($partner, $product, $reason);
 
             return $product->fresh(['category', 'agentLogs']);
         });
