@@ -19,13 +19,14 @@ class InventoryService
      */
     public function getExpiringProducts(int $daysThreshold = 7): Collection
     {
-        $today = now()->startOfDay()->toDateString();
-        $targetDate = now()->addDays($daysThreshold)->endOfDay()->toDateString();
+        $today = now()->toDateString();
+        $targetDate = now()->addDays($daysThreshold)->toDateString();
 
         return Product::query()
             ->with(['category:id,name,slug'])
             ->whereIn('status', ['active', 'discounted'])
-            ->whereBetween('expiration_date', [$today, $targetDate])
+            ->whereDate('expiration_date', '>=', $today)
+            ->whereDate('expiration_date', '<=', $targetDate)
             ->orderBy('expiration_date', 'asc')
             ->orderBy('quantity', 'desc')
             ->get();
