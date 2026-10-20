@@ -250,6 +250,11 @@ class SimulationController extends Controller
         $latestLog = AgentLog::query()
             ->with(['product:id,name,sku', 'partner:id,name'])
             ->where('product_id', $product->id)
+            ->where('action_type', '!=', 'alert_sent')
+            ->latest('id')
+            ->first() ?? AgentLog::query()
+            ->with(['product:id,name,sku', 'partner:id,name'])
+            ->where('product_id', $product->id)
             ->latest('id')
             ->first();
 
