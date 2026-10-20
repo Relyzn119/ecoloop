@@ -1,10 +1,10 @@
 <?php
 
+use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationPartnerController;
 use App\Http\Controllers\ProductController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', [DashboardController::class, 'index'])->name('home');
 
@@ -29,9 +29,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('donation-partners/{donation_partner}', [DonationPartnerController::class, 'destroy'])->name('donation-partners.destroy');
     Route::post('donation-partners/{donation_partner}/toggle-status', [DonationPartnerController::class, 'toggleStatus'])->name('donation-partners.toggle-status');
 
-    Route::get('agent-logs', function () {
-        return Inertia::render('AgentLogs');
-    })->name('agent-logs');
+    // AI Agent Logs & Manual Overrides Audit Trail
+    Route::get('agent-logs', [AgentLogController::class, 'index'])->name('agent-logs.index');
+    Route::post('agent-logs/{agent_log}/override', [AgentLogController::class, 'override'])->name('agent-logs.override');
+    Route::post('agent-logs/simulate', [AgentLogController::class, 'simulate'])->name('agent-logs.simulate');
 });
 
 require __DIR__.'/settings.php';
