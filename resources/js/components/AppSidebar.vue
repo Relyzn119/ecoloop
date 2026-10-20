@@ -5,7 +5,7 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, Folder, Handshake, LayoutGrid, Package, ScrollText, Settings } from 'lucide-vue-next';
+import { BookOpen, FlaskConical, Folder, Handshake, LayoutGrid, Package, ScrollText, Settings } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const mainNavItems: NavItem[] = [
@@ -18,6 +18,11 @@ const mainNavItems: NavItem[] = [
         title: 'Inventory',
         href: '/inventory',
         icon: Package,
+    },
+    {
+        title: 'AI Simulation',
+        href: '/simulation',
+        icon: FlaskConical,
     },
     {
         title: 'Agent Logs',

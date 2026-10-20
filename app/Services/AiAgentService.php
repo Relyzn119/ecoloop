@@ -24,11 +24,44 @@ class AiAgentService
      *     provider: string,
      * }
      */
-    public function evaluateProduct(Product $product): array
+    public function evaluateProduct(Product $product, ?string $forceProvider = null): array
     {
         $today = now()->startOfDay();
         $expDate = Carbon::parse($product->expiration_date)->startOfDay();
         $daysRemaining = (int) $today->diffInDays($expDate, false);
+
+        // Force specific provider if requested during live sandbox simulation
+        if ($forceProvider === 'mock') {
+            return $this->evaluateViaMock($product, $daysRemaining, 'mock');
+        }
+
+        if ($forceProvider === 'gemini' && $this->hasGeminiKey()) {
+            try {
+                $geminiResult = $this->evaluateViaGemini($product, $daysRemaining);
+                if ($geminiResult !== null) {
+                    return $geminiResult;
+                }
+            } catch (Throwable $e) {
+                Log::warning('Gemini API evaluation failed during forced run, falling back.', [
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($forceProvider === 'groq' && $this->hasGroqKey()) {
+            try {
+                $groqResult = $this->evaluateViaGroq($product, $daysRemaining);
+                if ($groqResult !== null) {
+                    return $groqResult;
+                }
+            } catch (Throwable $e) {
+                Log::warning('Groq API evaluation failed during forced run, falling back.', [
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         // 1. If Mock Mode is explicitly forced, run the local deterministic engine
         if ($this->shouldUseMock()) {

@@ -4,6 +4,7 @@ use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationPartnerController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\SimulationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [DashboardController::class, 'index'])->name('home');
@@ -33,6 +34,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('agent-logs', [AgentLogController::class, 'index'])->name('agent-logs.index');
     Route::post('agent-logs/{agent_log}/override', [AgentLogController::class, 'override'])->name('agent-logs.override');
     Route::post('agent-logs/simulate', [AgentLogController::class, 'simulate'])->name('agent-logs.simulate');
+
+    // Dedicated AI Simulation Sandbox for Live Demo Presentations
+    Route::get('simulation', [SimulationController::class, 'index'])->name('simulation.index');
+    Route::post('simulation/trigger', [SimulationController::class, 'triggerProductEvaluation'])->name('simulation.trigger');
+    Route::post('simulation/reset/{product}', [SimulationController::class, 'resetProduct'])->name('simulation.reset');
 });
 
 require __DIR__.'/settings.php';
