@@ -2,28 +2,8 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import {
-    AlertCircle,
-    AlertTriangle,
-    ArrowUpDown,
-    CheckCircle2,
-    Clock,
-    DollarSign,
-    Edit3,
-    Filter,
-    Handshake,
-    Info,
-    Package,
-    Plus,
-    RefreshCw,
-    Search,
-    ShieldAlert,
-    ShieldCheck,
-    Tag,
-    Trash2,
-    X,
-} from 'lucide-vue-next';
-import { computed, ref, watch } from 'vue';
+import { AlertTriangle, CheckCircle2, Clock, Edit3, Handshake, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
+import { computed, ref } from 'vue';
 
 interface CategoryItem {
     id: number;
@@ -361,14 +341,19 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                     <CheckCircle2 class="size-5 shrink-0 text-emerald-400" />
                     <span class="flex-1 font-medium">{{ flashSuccess }}</span>
                 </div>
+                <div
+                    v-else-if="flashError"
+                    class="flex items-center gap-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3.5 text-sm text-rose-400 shadow-sm"
+                >
+                    <AlertTriangle class="size-5 shrink-0 text-rose-400" />
+                    <span class="flex-1 font-medium">{{ flashError }}</span>
+                </div>
             </transition>
 
             <!-- Header Section -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-                        Food Inventory Management
-                    </h1>
+                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">Food Inventory Management</h1>
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">
                         Track stock levels, real-time expiration urgency, and execute manual markdown or donation overrides.
                     </p>
@@ -459,7 +444,10 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                             v-if="search"
                             type="button"
                             class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-                            @click="search = ''; applyFilters()"
+                            @click="
+                                search = '';
+                                applyFilters();
+                            "
                         >
                             <X class="size-4" />
                         </button>
@@ -527,7 +515,9 @@ const formatStatusLabel = (status: ProductItem['status']) => {
             <div class="overflow-hidden rounded-xl border border-neutral-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900/60">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm">
-                        <thead class="border-b border-neutral-200 bg-neutral-50/75 text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-400">
+                        <thead
+                            class="border-b border-neutral-200 bg-neutral-50/75 text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-400"
+                        >
                             <tr>
                                 <th scope="col" class="px-4 py-3.5 sm:px-6">SKU & Item</th>
                                 <th scope="col" class="px-4 py-3.5">Category</th>
@@ -548,7 +538,9 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                 <td class="px-4 py-4 sm:px-6">
                                     <div class="flex flex-col">
                                         <div class="flex items-center gap-2">
-                                            <span class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                                            <span
+                                                class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                                            >
                                                 {{ product.sku }}
                                             </span>
                                             <Link
@@ -558,7 +550,10 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                                 {{ product.name }}
                                             </Link>
                                         </div>
-                                        <p v-if="product.description" class="mt-1 line-clamp-1 max-w-xs text-xs text-neutral-500 dark:text-neutral-400">
+                                        <p
+                                            v-if="product.description"
+                                            class="mt-1 line-clamp-1 max-w-xs text-xs text-neutral-500 dark:text-neutral-400"
+                                        >
                                             {{ product.description }}
                                         </p>
                                     </div>
@@ -579,7 +574,10 @@ const formatStatusLabel = (status: ProductItem['status']) => {
 
                                 <!-- Price (with discount tag if active) -->
                                 <td class="whitespace-nowrap px-4 py-4">
-                                    <div v-if="product.discount_price !== null && product.discount_price < product.original_price" class="flex flex-col">
+                                    <div
+                                        v-if="product.discount_price !== null && product.discount_price < product.original_price"
+                                        class="flex flex-col"
+                                    >
                                         <span class="font-bold text-amber-600 dark:text-amber-400">
                                             {{ product.discount_price_formatted }}
                                         </span>
@@ -607,21 +605,14 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                                     getUrgencyBadgeClasses(product.urgency, product.days_remaining),
                                                 ]"
                                             >
-                                                <span
-                                                    v-if="product.urgency === 'critical'"
-                                                    class="relative flex size-2"
-                                                >
-                                                    <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+                                                <span v-if="product.urgency === 'critical'" class="relative flex size-2">
+                                                    <span
+                                                        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"
+                                                    ></span>
                                                     <span class="relative inline-flex size-2 rounded-full bg-rose-500"></span>
                                                 </span>
-                                                <span
-                                                    v-else-if="product.urgency === 'warning'"
-                                                    class="size-2 rounded-full bg-amber-500"
-                                                ></span>
-                                                <span
-                                                    v-else-if="product.urgency === 'safe'"
-                                                    class="size-2 rounded-full bg-emerald-500"
-                                                ></span>
+                                                <span v-else-if="product.urgency === 'warning'" class="size-2 rounded-full bg-amber-500"></span>
+                                                <span v-else-if="product.urgency === 'safe'" class="size-2 rounded-full bg-emerald-500"></span>
                                                 <span>{{ getUrgencyLabel(product.urgency, product.days_remaining) }}</span>
                                             </span>
                                         </div>
@@ -659,7 +650,11 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                         <button
                                             type="button"
                                             title="Reserve for Donation"
-                                            :disabled="product.status === 'donated' || product.status === 'disposed' || product.status === 'reserved_donation'"
+                                            :disabled="
+                                                product.status === 'donated' ||
+                                                product.status === 'disposed' ||
+                                                product.status === 'reserved_donation'
+                                            "
                                             class="inline-flex items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-xs font-semibold text-purple-400 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                                             @click="openDonationModal(product)"
                                         >
@@ -696,11 +691,13 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                         <div class="rounded-full bg-neutral-100 p-3 text-neutral-400 dark:bg-neutral-800">
                                             <Package class="size-8" />
                                         </div>
-                                        <h3 class="mt-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                                            No food products found
-                                        </h3>
+                                        <h3 class="mt-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">No food products found</h3>
                                         <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                            {{ hasActiveFilters ? 'Try adjusting your search query or urgency filters.' : 'Get started by adding your first inventory item.' }}
+                                            {{
+                                                hasActiveFilters
+                                                    ? 'Try adjusting your search query or urgency filters.'
+                                                    : 'Get started by adding your first inventory item.'
+                                            }}
                                         </p>
                                         <div class="mt-4 flex gap-2">
                                             <button
@@ -728,7 +725,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                 <!-- Pagination Footer -->
                 <div
                     v-if="products.total > 0"
-                    class="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 sm:flex-row sm:px-6 dark:border-neutral-800"
+                    class="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 dark:border-neutral-800 sm:flex-row sm:px-6"
                 >
                     <div class="text-xs text-neutral-500 dark:text-neutral-400">
                         Showing
@@ -742,11 +739,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
 
                     <div class="flex items-center gap-1">
                         <template v-for="(link, idx) in products.links" :key="idx">
-                            <span
-                                v-if="!link.url"
-                                class="rounded-md px-2.5 py-1 text-xs text-neutral-400"
-                                v-html="link.label"
-                            />
+                            <span v-if="!link.url" class="rounded-md px-2.5 py-1 text-xs text-neutral-400" v-html="link.label" />
                             <Link
                                 v-else
                                 :href="link.url"
@@ -758,8 +751,9 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                         ? 'bg-emerald-600 text-white shadow-sm'
                                         : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                                 ]"
-                                v-html="link.label"
-                            />
+                            >
+                                <span v-html="link.label" />
+                            </Link>
                         </template>
                     </div>
                 </div>
@@ -771,13 +765,13 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                 class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
                 @click.self="closeDiscountModal"
             >
-                <div class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                <div
+                    class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+                >
                     <div class="flex items-center justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
                         <div class="flex items-center gap-2 text-amber-500">
                             <Tag class="size-5" />
-                            <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                                Apply Clearance Markdown
-                            </h3>
+                            <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Apply Clearance Markdown</h3>
                         </div>
                         <button
                             type="button"
@@ -804,12 +798,8 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                         <!-- Discount Percentage Picker -->
                         <div>
                             <div class="flex items-center justify-between">
-                                <label class="text-xs font-semibold uppercase text-neutral-600 dark:text-neutral-300">
-                                    Discount Percentage
-                                </label>
-                                <span class="font-mono text-base font-bold text-amber-500">
-                                    {{ discountPercentage }}%
-                                </span>
+                                <label class="text-xs font-semibold uppercase text-neutral-600 dark:text-neutral-300"> Discount Percentage </label>
+                                <span class="font-mono text-base font-bold text-amber-500"> {{ discountPercentage }}% </span>
                             </div>
                             <input
                                 v-model.number="discountPercentage"
@@ -843,9 +833,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                         <div class="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5">
                             <div>
                                 <p class="text-xs font-medium text-amber-500">New Clearance Price</p>
-                                <p class="mt-0.5 text-lg font-bold text-amber-500">
-                                    IDR {{ calculatedDiscountPrice.toLocaleString('id-ID') }}
-                                </p>
+                                <p class="mt-0.5 text-lg font-bold text-amber-500">IDR {{ calculatedDiscountPrice.toLocaleString('id-ID') }}</p>
                             </div>
                             <span class="rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-500">
                                 Save {{ discountPercentage }}%
@@ -894,13 +882,13 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                 class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
                 @click.self="closeDonationModal"
             >
-                <div class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                <div
+                    class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+                >
                     <div class="flex items-center justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
                         <div class="flex items-center gap-2 text-purple-500">
                             <Handshake class="size-5" />
-                            <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                                Reserve for Charity Donation
-                            </h3>
+                            <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Reserve for Charity Donation</h3>
                         </div>
                         <button
                             type="button"
@@ -933,11 +921,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                 v-model="selectedPartnerId"
                                 class="mt-1.5 w-full rounded-lg border border-neutral-200 bg-neutral-50/50 px-3 py-2 text-xs text-neutral-900 focus:border-purple-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-purple-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100"
                             >
-                                <option
-                                    v-for="partner in donation_partners"
-                                    :key="partner.id"
-                                    :value="partner.id"
-                                >
+                                <option v-for="partner in donation_partners" :key="partner.id" :value="partner.id">
                                     {{ partner.name }} (Contact: {{ partner.contact_person }})
                                 </option>
                             </select>
@@ -985,20 +969,18 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                 class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
                 @click.self="closeDeleteModal"
             >
-                <div class="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                <div
+                    class="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+                >
                     <div class="flex items-center gap-3 text-red-500">
                         <AlertTriangle class="size-6 shrink-0" />
-                        <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                            Delete Product?
-                        </h3>
+                        <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Delete Product?</h3>
                     </div>
 
                     <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
                         Are you sure you want to permanently delete
-                        <span class="font-semibold text-neutral-900 dark:text-neutral-100">
-                            {{ deleteTargetProduct?.name }}
-                        </span>?
-                        This will remove its stock tracking and related logs.
+                        <span class="font-semibold text-neutral-900 dark:text-neutral-100"> {{ deleteTargetProduct?.name }} </span>? This will remove
+                        its stock tracking and related logs.
                     </p>
 
                     <div class="mt-6 flex items-center justify-end gap-2">

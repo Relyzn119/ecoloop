@@ -16,8 +16,6 @@ import {
     Plus,
     RefreshCw,
     Search,
-    ToggleLeft,
-    ToggleRight,
     Trash2,
     User,
     Users,
@@ -280,9 +278,7 @@ const toggleStatus = (partner: PartnerItem) => {
             <!-- Header Section -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-                        Donation Partners & Charity Network
-                    </h1>
+                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">Donation Partners & Charity Network</h1>
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">
                         Manage verified food banks, shelters, and orphanages receiving automated surplus food dispatches.
                     </p>
@@ -363,7 +359,10 @@ const toggleStatus = (partner: PartnerItem) => {
                             v-if="search"
                             type="button"
                             class="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-                            @click="search = ''; applyFilters()"
+                            @click="
+                                search = '';
+                                applyFilters();
+                            "
                         >
                             <X class="size-4" />
                         </button>
@@ -399,7 +398,9 @@ const toggleStatus = (partner: PartnerItem) => {
             <div class="overflow-hidden rounded-xl border border-neutral-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900/60">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm">
-                        <thead class="border-b border-neutral-200 bg-neutral-50/75 text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-400">
+                        <thead
+                            class="border-b border-neutral-200 bg-neutral-50/75 text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:border-neutral-800 dark:bg-neutral-800/50 dark:text-neutral-400"
+                        >
                             <tr>
                                 <th scope="col" class="px-4 py-3.5 sm:px-6">Partner Organization</th>
                                 <th scope="col" class="px-4 py-3.5">Contact Person</th>
@@ -418,16 +419,16 @@ const toggleStatus = (partner: PartnerItem) => {
                                 <!-- Name -->
                                 <td class="px-4 py-4 sm:px-6">
                                     <div class="flex items-center gap-3">
-                                        <div class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                        <div
+                                            class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                        >
                                             <Building2 class="size-4.5" />
                                         </div>
                                         <div>
                                             <p class="font-semibold text-neutral-900 dark:text-neutral-100">
                                                 {{ partner.name }}
                                             </p>
-                                            <p class="text-xs text-neutral-400">
-                                                Partner ID #{{ partner.id }}
-                                            </p>
+                                            <p class="text-xs text-neutral-400">Partner ID #{{ partner.id }}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -462,8 +463,8 @@ const toggleStatus = (partner: PartnerItem) => {
 
                                 <!-- Address -->
                                 <td class="px-4 py-4 text-xs text-neutral-500 dark:text-neutral-400">
-                                    <div class="flex items-start gap-1.5 max-w-xs">
-                                        <MapPin class="size-3.5 shrink-0 text-neutral-400 mt-0.5" />
+                                    <div class="flex max-w-xs items-start gap-1.5">
+                                        <MapPin class="mt-0.5 size-3.5 shrink-0 text-neutral-400" />
                                         <span class="line-clamp-2">{{ partner.address }}</span>
                                     </div>
                                 </td>
@@ -477,15 +478,12 @@ const toggleStatus = (partner: PartnerItem) => {
                                         class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition"
                                         :class="[
                                             partner.is_active
-                                                ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20'
-                                                : 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20 hover:bg-neutral-500/20',
+                                                ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                                                : 'border border-neutral-500/20 bg-neutral-500/10 text-neutral-400 hover:bg-neutral-500/20',
                                         ]"
                                         @click="toggleStatus(partner)"
                                     >
-                                        <span
-                                            class="size-1.5 rounded-full"
-                                            :class="partner.is_active ? 'bg-emerald-500' : 'bg-neutral-400'"
-                                        ></span>
+                                        <span class="size-1.5 rounded-full" :class="partner.is_active ? 'bg-emerald-500' : 'bg-neutral-400'"></span>
                                         <span>{{ partner.is_active ? 'Active' : 'Inactive' }}</span>
                                     </button>
                                 </td>
@@ -523,11 +521,13 @@ const toggleStatus = (partner: PartnerItem) => {
                                         <div class="rounded-full bg-neutral-100 p-3 text-neutral-400 dark:bg-neutral-800">
                                             <Handshake class="size-8" />
                                         </div>
-                                        <h3 class="mt-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                                            No donation partners found
-                                        </h3>
+                                        <h3 class="mt-3 text-sm font-semibold text-neutral-900 dark:text-neutral-100">No donation partners found</h3>
                                         <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                                            {{ hasActiveFilters ? 'No partners matched your filter criteria.' : 'Register your first food bank or orphanage to start surplus allocations.' }}
+                                            {{
+                                                hasActiveFilters
+                                                    ? 'No partners matched your filter criteria.'
+                                                    : 'Register your first food bank or orphanage to start surplus allocations.'
+                                            }}
                                         </p>
                                         <div class="mt-4 flex gap-2">
                                             <button
@@ -556,7 +556,7 @@ const toggleStatus = (partner: PartnerItem) => {
                 <!-- Pagination Footer -->
                 <div
                     v-if="partners.total > 0"
-                    class="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 sm:flex-row sm:px-6 dark:border-neutral-800"
+                    class="flex flex-col items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 dark:border-neutral-800 sm:flex-row sm:px-6"
                 >
                     <div class="text-xs text-neutral-500 dark:text-neutral-400">
                         Showing
@@ -570,11 +570,7 @@ const toggleStatus = (partner: PartnerItem) => {
 
                     <div class="flex items-center gap-1">
                         <template v-for="(link, idx) in partners.links" :key="idx">
-                            <span
-                                v-if="!link.url"
-                                class="rounded-md px-2.5 py-1 text-xs text-neutral-400"
-                                v-html="link.label"
-                            />
+                            <span v-if="!link.url" class="rounded-md px-2.5 py-1 text-xs text-neutral-400" v-html="link.label" />
                             <Link
                                 v-else
                                 :href="link.url"
@@ -586,8 +582,9 @@ const toggleStatus = (partner: PartnerItem) => {
                                         ? 'bg-emerald-600 text-white shadow-sm'
                                         : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800',
                                 ]"
-                                v-html="link.label"
-                            />
+                            >
+                                <span v-html="link.label" />
+                            </Link>
                         </template>
                     </div>
                 </div>
@@ -599,7 +596,9 @@ const toggleStatus = (partner: PartnerItem) => {
                 class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
                 @click.self="closeFormModal"
             >
-                <div class="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                <div
+                    class="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+                >
                     <div class="flex items-center justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
                         <div class="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
                             <Building2 class="size-5" />
@@ -648,7 +647,10 @@ const toggleStatus = (partner: PartnerItem) => {
                                     class="mt-1.5 w-full rounded-lg border border-neutral-200 bg-neutral-50/50 px-3.5 py-2.5 text-sm text-neutral-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100"
                                     :class="{ 'border-red-500': form.errors.contact_person || clientErrors.contact_person }"
                                 />
-                                <p v-if="form.errors.contact_person || clientErrors.contact_person" class="mt-1 flex items-center gap-1 text-xs text-red-500">
+                                <p
+                                    v-if="form.errors.contact_person || clientErrors.contact_person"
+                                    class="mt-1 flex items-center gap-1 text-xs text-red-500"
+                                >
                                     <AlertCircle class="size-3.5" />
                                     <span>{{ form.errors.contact_person || clientErrors.contact_person }}</span>
                                 </p>
@@ -749,12 +751,12 @@ const toggleStatus = (partner: PartnerItem) => {
                 class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
                 @click.self="closeDeleteModal"
             >
-                <div class="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                <div
+                    class="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
+                >
                     <div class="flex items-center gap-3 text-red-500">
                         <AlertTriangle class="size-6 shrink-0" />
-                        <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                            Delete Partner?
-                        </h3>
+                        <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Delete Partner?</h3>
                     </div>
 
                     <p class="mt-3 text-xs text-neutral-500 dark:text-neutral-400">

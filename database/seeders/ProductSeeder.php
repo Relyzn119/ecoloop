@@ -331,9 +331,9 @@ class ProductSeeder extends Seeder
 
             if ($agentAction) {
                 $partnerId = null;
-                if (!empty($agentAction['payload']['partner_id'])) {
+                if (! empty($agentAction['payload']['partner_id'])) {
                     $partnerId = $agentAction['payload']['partner_id'];
-                } elseif (!empty($agentAction['payload']['recipient'])) {
+                } elseif (! empty($agentAction['payload']['recipient'])) {
                     $partnerId = DonationPartner::where('name', $agentAction['payload']['recipient'])->value('id');
                 }
 

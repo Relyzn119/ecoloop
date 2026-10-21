@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\AgentLog;
+use App\Models\DonationPartner;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -35,11 +36,11 @@ class AgentLogFactory extends Factory
     /**
      * Indicate that the log is for a donation request.
      */
-    public function forDonation(?\App\Models\DonationPartner $partner = null): static
+    public function forDonation(?DonationPartner $partner = null): static
     {
         return $this->state(fn (array $attributes) => [
             'action_type' => 'donation_requested',
-            'partner_id' => $partner?->id ?? \App\Models\DonationPartner::factory(),
+            'partner_id' => $partner?->id ?? DonationPartner::factory(),
         ]);
     }
 }

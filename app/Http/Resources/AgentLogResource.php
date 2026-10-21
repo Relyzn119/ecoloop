@@ -29,7 +29,7 @@ class AgentLogResource extends JsonResource
                 'email' => $partner->email,
                 'phone' => $partner->phone,
             ];
-        } elseif (!empty($this->payload['partner_name']) || !empty($this->payload['recipient'])) {
+        } elseif (! empty($this->payload['partner_name']) || ! empty($this->payload['recipient'])) {
             $partnerData = [
                 'id' => $this->payload['partner_id'] ?? null,
                 'name' => $this->payload['partner_name'] ?? $this->payload['recipient'] ?? 'Partner',

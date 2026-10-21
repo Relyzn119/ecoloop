@@ -247,7 +247,7 @@ async function quickDiscount(productId: number) {
 
                     <Link
                         href="/simulation"
-                        class="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400 dark:hover:bg-emerald-500/30 transition shadow-sm"
+                        class="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-500/20 dark:text-emerald-400 dark:hover:bg-emerald-500/30"
                     >
                         <FlaskConical class="size-4 text-emerald-600 dark:text-emerald-400" />
                         <span>AI Sandbox Demo</span>

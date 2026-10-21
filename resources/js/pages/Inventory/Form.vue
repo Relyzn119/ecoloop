@@ -2,20 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import {
-    AlertCircle,
-    ArrowLeft,
-    Calendar,
-    Check,
-    Coins,
-    DollarSign,
-    Layers,
-    Package,
-    RefreshCw,
-    Save,
-    Sparkles,
-    Tag,
-} from 'lucide-vue-next';
+import { AlertCircle, ArrowLeft, Calendar, Save, Sparkles } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface CategoryItem {
@@ -154,7 +141,11 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                         </h1>
                     </div>
                     <p class="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                        {{ isEditing ? 'Update stock levels, pricing, or expiration dates for this product.' : 'Register a new food surplus item to enable shelf-life urgency tracking.' }}
+                        {{
+                            isEditing
+                                ? 'Update stock levels, pricing, or expiration dates for this product.'
+                                : 'Register a new food surplus item to enable shelf-life urgency tracking.'
+                        }}
                     </p>
                 </div>
 
@@ -172,7 +163,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                         @click="submitForm"
                     >
                         <Save class="size-4" />
-                        <span>{{ form.processing ? 'Saving...' : (isEditing ? 'Update Product' : 'Save Product') }}</span>
+                        <span>{{ form.processing ? 'Saving...' : isEditing ? 'Update Product' : 'Save Product' }}</span>
                     </button>
                 </div>
             </div>
@@ -185,12 +176,8 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                 <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <!-- Basic Information Section -->
                     <div class="col-span-1 md:col-span-2">
-                        <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-                            Product Details
-                        </h2>
-                        <p class="text-xs text-neutral-500 dark:text-neutral-400">
-                            General classification and stock identity information.
-                        </p>
+                        <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-100">Product Details</h2>
+                        <p class="text-xs text-neutral-500 dark:text-neutral-400">General classification and stock identity information.</p>
                     </div>
 
                     <!-- SKU -->
@@ -295,10 +282,8 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                     </div>
 
                     <!-- Inventory & Pricing Section -->
-                    <div class="col-span-1 border-t border-neutral-200 pt-4 md:col-span-2 dark:border-neutral-800">
-                        <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-                            Stock, Expiration & Pricing
-                        </h2>
+                    <div class="col-span-1 border-t border-neutral-200 pt-4 dark:border-neutral-800 md:col-span-2">
+                        <h2 class="text-base font-semibold text-neutral-900 dark:text-neutral-100">Stock, Expiration & Pricing</h2>
                         <p class="text-xs text-neutral-500 dark:text-neutral-400">
                             Specify stock units and shelf-life timeline to compute AI markdown eligibility.
                         </p>
@@ -397,7 +382,10 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                                 </button>
                             </div>
                         </div>
-                        <p v-if="form.errors.expiration_date || clientErrors.expiration_date" class="mt-1 flex items-center gap-1 text-xs text-red-500">
+                        <p
+                            v-if="form.errors.expiration_date || clientErrors.expiration_date"
+                            class="mt-1 flex items-center gap-1 text-xs text-red-500"
+                        >
                             <AlertCircle class="size-3.5" />
                             <span>{{ form.errors.expiration_date || clientErrors.expiration_date }}</span>
                         </p>
@@ -409,9 +397,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                             Original Retail Price (IDR) <span class="text-red-500">*</span>
                         </label>
                         <div class="relative mt-1.5">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400">
-                                IDR
-                            </span>
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400"> IDR </span>
                             <input
                                 v-model.number="form.original_price"
                                 type="number"
@@ -434,9 +420,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                             Discount / Clearance Price (Optional)
                         </label>
                         <div class="relative mt-1.5">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400">
-                                IDR
-                            </span>
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-neutral-400"> IDR </span>
                             <input
                                 v-model.number="form.discount_price"
                                 type="number"
@@ -468,7 +452,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                         class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50"
                     >
                         <Save class="size-4" />
-                        <span>{{ form.processing ? 'Saving...' : (isEditing ? 'Update Product' : 'Save Product') }}</span>
+                        <span>{{ form.processing ? 'Saving...' : isEditing ? 'Update Product' : 'Save Product' }}</span>
                     </button>
                 </div>
             </form>

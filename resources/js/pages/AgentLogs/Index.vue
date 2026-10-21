@@ -5,7 +5,6 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertCircle,
     AlertTriangle,
-    ArrowUpDown,
     Bot,
     Calendar,
     Check,
@@ -14,10 +13,8 @@ import {
     Code2,
     Copy,
     Cpu,
-    ExternalLink,
     Filter,
     HeartHandshake,
-    Package,
     Percent,
     RefreshCw,
     RotateCcw,
@@ -167,12 +164,7 @@ const resetAllFilters = () => {
 };
 
 const hasActiveFilters = computed(() => {
-    return (
-        search.value !== '' ||
-        selectedActionType.value !== 'all' ||
-        selectedStatus.value !== 'all' ||
-        selectedDate.value !== 'all'
-    );
+    return search.value !== '' || selectedActionType.value !== 'all' || selectedStatus.value !== 'all' || selectedDate.value !== 'all';
 });
 
 // ─── AI Simulation & Refresh ────────────────────────────────────────────────
@@ -240,24 +232,21 @@ const copyJsonToClipboard = async () => {
 const syntaxHighlightedJson = computed(() => {
     if (!selectedLogForJson.value) return '';
     const json = JSON.stringify(selectedLogForJson.value.payload, null, 2);
-    return json.replace(
-        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
-        (match) => {
-            let cls = 'text-amber-400 dark:text-amber-300'; // number
-            if (/^"/.test(match)) {
-                if (/:$/.test(match)) {
-                    cls = 'text-sky-600 dark:text-sky-300 font-semibold'; // key
-                } else {
-                    cls = 'text-emerald-600 dark:text-emerald-400'; // string value
-                }
-            } else if (/true|false/.test(match)) {
-                cls = 'text-violet-600 dark:text-violet-400 font-medium'; // boolean
-            } else if (/null/.test(match)) {
-                cls = 'text-rose-500 font-medium'; // null
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+        let cls = 'text-amber-400 dark:text-amber-300'; // number
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'text-sky-600 dark:text-sky-300 font-semibold'; // key
+            } else {
+                cls = 'text-emerald-600 dark:text-emerald-400'; // string value
             }
-            return `<span class="${cls}">${match}</span>`;
-        },
-    );
+        } else if (/true|false/.test(match)) {
+            cls = 'text-violet-600 dark:text-violet-400 font-medium'; // boolean
+        } else if (/null/.test(match)) {
+            cls = 'text-rose-500 font-medium'; // null
+        }
+        return `<span class="${cls}">${match}</span>`;
+    });
 });
 
 // Detect AI model from payload
@@ -368,19 +357,24 @@ const submitManualOverride = () => {
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <div class="flex items-center gap-3">
-                        <div class="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-md shadow-emerald-500/20">
+                        <div
+                            class="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-md shadow-emerald-500/20"
+                        >
                             <Cpu class="size-5" />
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
                                 <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">AI Agent Audit Trail</h1>
-                                <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                                    <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span
+                                    class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
+                                >
+                                    <span class="size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
                                     Autonomous Ledger
                                 </span>
                             </div>
-                            <p class="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                                Transparent decision verification for competition evaluation, inspection of LLM payloads, and manual operator overrides.
+                            <p class="mt-0.5 text-xs text-muted-foreground sm:text-sm">
+                                Transparent decision verification for competition evaluation, inspection of LLM payloads, and manual operator
+                                overrides.
                             </p>
                         </div>
                     </div>
@@ -403,7 +397,7 @@ const submitManualOverride = () => {
                         type="button"
                         :disabled="isRefreshing"
                         @click="refreshLogs"
-                        class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-3.5 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 shadow-sm transition hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                        class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-sm font-medium text-neutral-700 shadow-sm transition hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
                         title="Refresh agent log stream"
                     >
                         <RefreshCw class="size-4" :class="{ 'animate-spin': isRefreshing }" />
@@ -423,7 +417,7 @@ const submitManualOverride = () => {
             >
                 <div
                     v-if="flashSuccess"
-                    class="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 dark:text-emerald-300 shadow-sm"
+                    class="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-800 shadow-sm dark:text-emerald-300"
                 >
                     <CheckCircle2 class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                     <span class="font-medium">{{ flashSuccess }}</span>
@@ -432,7 +426,7 @@ const submitManualOverride = () => {
 
             <div
                 v-if="flashError"
-                class="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-800 dark:text-rose-300 shadow-sm"
+                class="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-800 shadow-sm dark:text-rose-300"
             >
                 <AlertCircle class="size-5 shrink-0 text-rose-600 dark:text-rose-400" />
                 <span class="font-medium">{{ flashError }}</span>
@@ -441,7 +435,9 @@ const submitManualOverride = () => {
             <!-- Header Statistics Cards -->
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <!-- Card 1: Total Decisions -->
-                <div class="relative overflow-hidden rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-neutral-200/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Total Actions</span>
                         <Cpu class="size-4 text-neutral-600 dark:text-neutral-300" />
@@ -453,7 +449,9 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Card 2: Markdowns Applied -->
-                <div class="relative overflow-hidden rounded-2xl border border-emerald-500/20 dark:border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 to-white/70 dark:from-emerald-950/20 dark:to-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-50/50 to-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-emerald-500/30 dark:from-emerald-950/20 dark:to-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Markdowns</span>
                         <TrendingDown class="size-4" />
@@ -465,7 +463,9 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Card 3: Donations Dispatched -->
-                <div class="relative overflow-hidden rounded-2xl border border-sky-500/20 dark:border-sky-500/30 bg-gradient-to-br from-sky-50/50 to-white/70 dark:from-sky-950/20 dark:to-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-50/50 to-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-sky-500/30 dark:from-sky-950/20 dark:to-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-sky-600 dark:text-sky-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Donations</span>
                         <HeartHandshake class="size-4" />
@@ -477,7 +477,9 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Card 4: Alerts Dispatched -->
-                <div class="relative overflow-hidden rounded-2xl border border-amber-500/20 dark:border-amber-500/30 bg-gradient-to-br from-amber-50/50 to-white/70 dark:from-amber-950/20 dark:to-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-50/50 to-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-amber-500/30 dark:from-amber-950/20 dark:to-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-amber-600 dark:text-amber-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Alerts</span>
                         <AlertTriangle class="size-4" />
@@ -489,7 +491,9 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Card 5: Manual Overrides -->
-                <div class="relative overflow-hidden rounded-2xl border border-violet-500/20 dark:border-violet-500/30 bg-gradient-to-br from-violet-50/50 to-white/70 dark:from-violet-950/20 dark:to-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-50/50 to-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-violet-500/30 dark:from-violet-950/20 dark:to-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-violet-600 dark:text-violet-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Overrides</span>
                         <ShieldAlert class="size-4" />
@@ -501,7 +505,9 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Card 6: Success Rate -->
-                <div class="relative overflow-hidden rounded-2xl border border-teal-500/20 dark:border-teal-500/30 bg-gradient-to-br from-teal-50/50 to-white/70 dark:from-teal-950/20 dark:to-neutral-900/70 p-4 shadow-sm backdrop-blur-sm">
+                <div
+                    class="relative overflow-hidden rounded-2xl border border-teal-500/20 bg-gradient-to-br from-teal-50/50 to-white/70 p-4 shadow-sm backdrop-blur-sm dark:border-teal-500/30 dark:from-teal-950/20 dark:to-neutral-900/70"
+                >
                     <div class="flex items-center justify-between text-teal-600 dark:text-teal-400">
                         <span class="text-xs font-medium uppercase tracking-wider">Reliability</span>
                         <CheckCircle2 class="size-4" />
@@ -514,7 +520,7 @@ const submitManualOverride = () => {
             </div>
 
             <!-- Filter Controls Bar -->
-            <div class="flex flex-col gap-3 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 shadow-sm">
+            <div class="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <!-- Search Input -->
                     <div class="relative flex-1">
@@ -524,13 +530,13 @@ const submitManualOverride = () => {
                             @input="handleSearchInput"
                             type="text"
                             placeholder="Search by SKU, product name, partner, or reasoning keywords..."
-                            class="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 pl-10 pr-9 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-muted-foreground focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
+                            class="w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2 pl-10 pr-9 text-sm text-neutral-900 transition placeholder:text-muted-foreground focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100"
                         />
                         <button
                             v-if="search"
                             @click="clearSearch"
                             type="button"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
                         >
                             <X class="size-4" />
                         </button>
@@ -544,7 +550,7 @@ const submitManualOverride = () => {
                             <select
                                 v-model="selectedActionType"
                                 @change="applyFilters"
-                                class="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2 text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 sm:text-sm"
                             >
                                 <option value="all">All Action Types</option>
                                 <option value="discount_applied">Discounts Applied</option>
@@ -560,7 +566,7 @@ const submitManualOverride = () => {
                             <select
                                 v-model="selectedStatus"
                                 @change="applyFilters"
-                                class="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2 text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 sm:text-sm"
                             >
                                 <option value="all">All Statuses</option>
                                 <option value="success">Success</option>
@@ -575,7 +581,7 @@ const submitManualOverride = () => {
                             <select
                                 v-model="selectedDate"
                                 @change="applyFilters"
-                                class="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2 text-xs sm:text-sm font-medium text-neutral-800 dark:text-neutral-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                class="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-800 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-200 sm:text-sm"
                             >
                                 <option value="all">All Time</option>
                                 <option value="today">Today Only</option>
@@ -589,7 +595,7 @@ const submitManualOverride = () => {
                             v-if="hasActiveFilters"
                             @click="resetAllFilters"
                             type="button"
-                            class="inline-flex items-center gap-1 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-2.5 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 transition hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                            class="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white px-2.5 py-2 text-xs font-medium text-rose-600 transition hover:bg-rose-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-rose-400 dark:hover:bg-rose-950/30"
                         >
                             <X class="size-3.5" />
                             <span>Reset Filters</span>
@@ -599,15 +605,17 @@ const submitManualOverride = () => {
             </div>
 
             <!-- Main Audit Log Table -->
-            <div class="overflow-hidden rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm">
+            <div class="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm">
-                        <thead class="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-950/50 text-xs font-semibold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">
+                        <thead
+                            class="border-b border-neutral-200 bg-neutral-50/80 text-xs font-semibold uppercase tracking-wider text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950/50 dark:text-neutral-400"
+                        >
                             <tr>
                                 <th scope="col" class="px-4 py-3.5 sm:px-6">Timestamp & Model</th>
                                 <th scope="col" class="px-4 py-3.5">Product SKU / Name</th>
                                 <th scope="col" class="px-4 py-3.5">Action Type</th>
-                                <th scope="col" class="px-4 py-3.5 min-w-[280px]">Autonomous Reasoning</th>
+                                <th scope="col" class="min-w-[280px] px-4 py-3.5">Autonomous Reasoning</th>
                                 <th scope="col" class="px-4 py-3.5 text-center">Status</th>
                                 <th scope="col" class="px-4 py-3.5 text-right sm:px-6">Actions</th>
                             </tr>
@@ -617,11 +625,15 @@ const submitManualOverride = () => {
                             <!-- Empty State -->
                             <tr v-if="logs.data.length === 0">
                                 <td colspan="6" class="px-6 py-16 text-center">
-                                    <div class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400">
+                                    <div
+                                        class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-400 dark:bg-neutral-800"
+                                    >
                                         <Bot class="size-7" />
                                     </div>
-                                    <h3 class="mt-4 text-base font-semibold text-neutral-900 dark:text-neutral-100">No AI agent logs match your filters</h3>
-                                    <p class="mt-1 text-sm text-muted-foreground max-w-sm mx-auto">
+                                    <h3 class="mt-4 text-base font-semibold text-neutral-900 dark:text-neutral-100">
+                                        No AI agent logs match your filters
+                                    </h3>
+                                    <p class="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
                                         Try broadening your search criteria or trigger a live simulation scan to populate autonomous entries.
                                     </p>
                                     <div class="mt-5 flex items-center justify-center gap-3">
@@ -629,7 +641,7 @@ const submitManualOverride = () => {
                                             v-if="hasActiveFilters"
                                             @click="resetAllFilters"
                                             type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3.5 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
+                                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
                                         >
                                             <RotateCcw class="size-3.5" />
                                             <span>Clear Filters</span>
@@ -647,13 +659,9 @@ const submitManualOverride = () => {
                             </tr>
 
                             <!-- Data Rows -->
-                            <tr
-                                v-for="log in logs.data"
-                                :key="log.id"
-                                class="transition-colors hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40"
-                            >
+                            <tr v-for="log in logs.data" :key="log.id" class="transition-colors hover:bg-neutral-50/70 dark:hover:bg-neutral-800/40">
                                 <!-- Timestamp & Engine Model -->
-                                <td class="px-4 py-4 sm:px-6 whitespace-nowrap align-top">
+                                <td class="whitespace-nowrap px-4 py-4 align-top sm:px-6">
                                     <div class="flex flex-col">
                                         <div class="flex items-center gap-1.5 text-xs font-semibold text-neutral-900 dark:text-neutral-100">
                                             <Clock class="size-3 text-muted-foreground" />
@@ -663,10 +671,16 @@ const submitManualOverride = () => {
                                             {{ log.created_at ? new Date(log.created_at).toLocaleString() : 'Just now' }}
                                         </span>
                                         <div class="mt-1.5 flex items-center gap-1">
-                                            <span class="inline-flex items-center rounded-md bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                                            <span
+                                                class="inline-flex items-center rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                                            >
                                                 {{ getModelBadge(log.payload) }}
                                             </span>
-                                            <span v-if="log.payload.is_overridden" class="inline-flex items-center rounded-md bg-violet-100 dark:bg-violet-950/60 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:text-violet-300" title="This autonomous action was manually adjusted">
+                                            <span
+                                                v-if="log.payload.is_overridden"
+                                                class="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300"
+                                                title="This autonomous action was manually adjusted"
+                                            >
                                                 Overridden
                                             </span>
                                         </div>
@@ -680,28 +694,36 @@ const submitManualOverride = () => {
                                             <span class="font-mono text-xs font-bold text-neutral-900 dark:text-neutral-100">
                                                 {{ log.product.sku }}
                                             </span>
-                                            <span v-if="log.product.category" class="rounded-md bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:text-neutral-400">
+                                            <span
+                                                v-if="log.product.category"
+                                                class="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+                                            >
                                                 {{ log.product.category }}
                                             </span>
                                         </div>
-                                        <span class="text-sm font-medium text-neutral-800 dark:text-neutral-200 mt-0.5 line-clamp-1" :title="log.product.name">
+                                        <span
+                                            class="mt-0.5 line-clamp-1 text-sm font-medium text-neutral-800 dark:text-neutral-200"
+                                            :title="log.product.name"
+                                        >
                                             {{ log.product.name }}
                                         </span>
                                         <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                                             <span v-if="log.product.discount_price">
-                                                <span class="line-through text-muted-foreground/70">${{ Number(log.product.original_price).toFixed(2) }}</span>
-                                                <span class="ml-1 font-semibold text-emerald-600 dark:text-emerald-400">${{ Number(log.product.discount_price).toFixed(2) }}</span>
+                                                <span class="text-muted-foreground/70 line-through"
+                                                    >${{ Number(log.product.original_price).toFixed(2) }}</span
+                                                >
+                                                <span class="ml-1 font-semibold text-emerald-600 dark:text-emerald-400"
+                                                    >${{ Number(log.product.discount_price).toFixed(2) }}</span
+                                                >
                                             </span>
-                                            <span v-else-if="log.product.original_price">
-                                                ${{ Number(log.product.original_price).toFixed(2) }}
-                                            </span>
+                                            <span v-else-if="log.product.original_price"> ${{ Number(log.product.original_price).toFixed(2) }} </span>
                                             <span v-if="log.product.expiration_date" class="text-[11px]">
                                                 • Exp: {{ log.product.expiration_date }}
                                             </span>
                                         </div>
                                     </div>
                                     <div v-else class="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <div class="size-6 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                                        <div class="flex size-6 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
                                             <Cpu class="size-3.5 text-neutral-500" />
                                         </div>
                                         <div>
@@ -712,43 +734,55 @@ const submitManualOverride = () => {
                                 </td>
 
                                 <!-- Action Type Badge -->
-                                <td class="px-4 py-4 whitespace-nowrap align-top">
+                                <td class="whitespace-nowrap px-4 py-4 align-top">
                                     <!-- Discount Applied -->
-                                    <div v-if="log.action_type === 'discount_applied'" class="flex flex-col gap-1 items-start">
-                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                    <div v-if="log.action_type === 'discount_applied'" class="flex flex-col items-start gap-1">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300"
+                                        >
                                             <Percent class="size-3.5" />
                                             <span>Discount Applied</span>
                                         </span>
-                                        <span v-if="log.payload.discount_percentage" class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        <span
+                                            v-if="log.payload.discount_percentage"
+                                            class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400"
+                                        >
                                             -{{ log.payload.discount_percentage }}% Markdown
                                         </span>
                                     </div>
 
                                     <!-- Donation Requested -->
-                                    <div v-else-if="log.action_type === 'donation_requested'" class="flex flex-col gap-1 items-start">
-                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                    <div v-else-if="log.action_type === 'donation_requested'" class="flex flex-col items-start gap-1">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs font-semibold text-sky-700 dark:text-sky-300"
+                                        >
                                             <HeartHandshake class="size-3.5" />
                                             <span>Donation Reserved</span>
                                         </span>
-                                        <span v-if="log.partner?.name || log.payload.partner_name || log.payload.recipient" class="text-[11px] font-medium text-sky-600 dark:text-sky-400 line-clamp-1 max-w-[140px]">
+                                        <span
+                                            v-if="log.partner?.name || log.payload.partner_name || log.payload.recipient"
+                                            class="line-clamp-1 max-w-[140px] text-[11px] font-medium text-sky-600 dark:text-sky-400"
+                                        >
                                             → {{ log.partner?.name || log.payload.partner_name || log.payload.recipient }}
                                         </span>
                                     </div>
 
                                     <!-- Alert Sent -->
-                                    <div v-else-if="log.action_type === 'alert_sent'" class="flex flex-col gap-1 items-start">
-                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                    <div v-else-if="log.action_type === 'alert_sent'" class="flex flex-col items-start gap-1">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300"
+                                        >
                                             <AlertTriangle class="size-3.5" />
                                             <span>Alert Broadcasted</span>
                                         </span>
-                                        <span class="text-[11px] text-amber-600/90 dark:text-amber-400/90">
-                                            Inventory alert
-                                        </span>
+                                        <span class="text-[11px] text-amber-600/90 dark:text-amber-400/90"> Inventory alert </span>
                                     </div>
 
                                     <!-- Manual Override -->
-                                    <div v-else-if="log.action_type === 'manual_override'" class="flex flex-col gap-1 items-start">
-                                        <span class="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                                    <div v-else-if="log.action_type === 'manual_override'" class="flex flex-col items-start gap-1">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:text-violet-300"
+                                        >
                                             <ShieldAlert class="size-3.5" />
                                             <span>Manual Override</span>
                                         </span>
@@ -761,19 +795,28 @@ const submitManualOverride = () => {
                                 <!-- Reasoning Summary -->
                                 <td class="px-4 py-4 align-top">
                                     <div class="flex flex-col gap-1.5">
-                                        <p class="text-xs sm:text-sm text-neutral-800 dark:text-neutral-200 leading-relaxed font-normal">
+                                        <p class="text-xs font-normal leading-relaxed text-neutral-800 dark:text-neutral-200 sm:text-sm">
                                             {{ log.reasoning }}
                                         </p>
 
                                         <!-- Highlight Chips from Payload -->
                                         <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                            <span v-if="log.payload.rule" class="rounded bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 font-mono text-[10px]">
+                                            <span
+                                                v-if="log.payload.rule"
+                                                class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] dark:bg-neutral-800"
+                                            >
                                                 rule: {{ log.payload.rule }}
                                             </span>
-                                            <span v-if="log.payload.confidence" class="rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 font-semibold text-[10px]">
+                                            <span
+                                                v-if="log.payload.confidence"
+                                                class="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400"
+                                            >
                                                 {{ Math.round(Number(log.payload.confidence) * 100) }}% confidence
                                             </span>
-                                            <span v-if="log.payload.override_reason" class="rounded bg-violet-500/10 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 font-medium text-[10px]">
+                                            <span
+                                                v-if="log.payload.override_reason"
+                                                class="rounded bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300"
+                                            >
                                                 Overridden: "{{ log.payload.override_reason }}"
                                             </span>
                                         </div>
@@ -781,7 +824,7 @@ const submitManualOverride = () => {
                                 </td>
 
                                 <!-- Status Badge -->
-                                <td class="px-4 py-4 text-center whitespace-nowrap align-top">
+                                <td class="whitespace-nowrap px-4 py-4 text-center align-top">
                                     <span
                                         v-if="log.status === 'success'"
                                         class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
@@ -806,13 +849,13 @@ const submitManualOverride = () => {
                                 </td>
 
                                 <!-- Actions -->
-                                <td class="px-4 py-4 text-right whitespace-nowrap align-top sm:px-6">
+                                <td class="whitespace-nowrap px-4 py-4 text-right align-top sm:px-6">
                                     <div class="flex items-center justify-end gap-1.5">
                                         <!-- Inspect JSON Payload Button -->
                                         <button
                                             @click="openJsonModal(log)"
                                             type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 px-2.5 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 shadow-sm transition hover:bg-neutral-50 dark:hover:bg-neutral-700/80 active:translate-y-0.5"
+                                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm transition hover:bg-neutral-50 active:translate-y-0.5 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700/80"
                                             title="Inspect raw JSON payload from AI engine"
                                         >
                                             <Code2 class="size-3.5 text-sky-600 dark:text-sky-400" />
@@ -824,7 +867,7 @@ const submitManualOverride = () => {
                                             v-if="log.product_id && log.action_type !== 'manual_override'"
                                             @click="openOverrideModal(log)"
                                             type="button"
-                                            class="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 dark:border-violet-900/60 bg-violet-50/50 dark:bg-violet-950/30 px-2.5 py-1.5 text-xs font-semibold text-violet-700 dark:text-violet-300 shadow-sm transition hover:bg-violet-100 dark:hover:bg-violet-900/50 active:translate-y-0.5"
+                                            class="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50/50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 shadow-sm transition hover:bg-violet-100 active:translate-y-0.5 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-900/50"
                                             title="Manually revert or adjust this automated decision"
                                         >
                                             <RotateCcw class="size-3.5 text-violet-600 dark:text-violet-400" />
@@ -840,7 +883,7 @@ const submitManualOverride = () => {
                 <!-- Pagination Footer -->
                 <div
                     v-if="logs.total > 0"
-                    class="flex flex-col gap-3 border-t border-neutral-200 dark:border-neutral-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                    class="flex flex-col gap-3 border-t border-neutral-200 px-4 py-4 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between sm:px-6"
                 >
                     <div class="text-xs text-muted-foreground">
                         Showing
@@ -861,11 +904,12 @@ const submitManualOverride = () => {
                                     'inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-medium transition',
                                     link.active
                                         ? 'bg-emerald-600 text-white shadow-sm'
-                                        : 'border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800',
+                                        : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
                                 ]"
-                                v-html="link.label"
                                 preserve-scroll
-                            />
+                            >
+                                <span v-html="link.label" />
+                            </Link>
                             <span
                                 v-else
                                 class="inline-flex items-center justify-center px-2 py-1.5 text-xs text-muted-foreground/60"
@@ -885,27 +929,27 @@ const submitManualOverride = () => {
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-all"
         >
             <div
-                class="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-2xl overflow-hidden"
+                class="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
                 @click.stop
             >
                 <!-- Modal Header -->
-                <div class="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-6 py-4 bg-neutral-50/70 dark:bg-neutral-950/40">
+                <div
+                    class="flex items-center justify-between border-b border-neutral-200 bg-neutral-50/70 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40"
+                >
                     <div class="flex items-center gap-3">
                         <div class="flex size-9 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
                             <Code2 class="size-5" />
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
-                                <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
-                                    Raw AI Decision Payload
-                                </h3>
-                                <span class="rounded bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
+                                <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Raw AI Decision Payload</h3>
+                                <span
+                                    class="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+                                >
                                     #LOG-{{ selectedLogForJson.id }}
                                 </span>
                             </div>
-                            <p class="text-xs text-muted-foreground">
-                                Verified payload from {{ getModelBadge(selectedLogForJson.payload) }}
-                            </p>
+                            <p class="text-xs text-muted-foreground">Verified payload from {{ getModelBadge(selectedLogForJson.payload) }}</p>
                         </div>
                     </div>
 
@@ -913,7 +957,7 @@ const submitManualOverride = () => {
                         <button
                             @click="copyJsonToClipboard"
                             type="button"
-                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-300 shadow-sm transition hover:bg-neutral-50 dark:hover:bg-neutral-700"
+                            class="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm transition hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
                         >
                             <Check v-if="hasCopiedJson" class="size-3.5 text-emerald-500" />
                             <Copy v-else class="size-3.5" />
@@ -923,7 +967,7 @@ const submitManualOverride = () => {
                         <button
                             @click="closeJsonModal"
                             type="button"
-                            class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-700 dark:hover:text-neutral-200 transition"
+                            class="rounded-xl p-2 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                         >
                             <X class="size-5" />
                         </button>
@@ -931,28 +975,30 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Modal Sub-Header: Payload Metadata Chips -->
-                <div class="grid grid-cols-2 gap-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/40 dark:bg-neutral-950/20 px-6 py-3 sm:grid-cols-4">
+                <div
+                    class="grid grid-cols-2 gap-3 border-b border-neutral-200 bg-neutral-50/40 px-6 py-3 dark:border-neutral-800 dark:bg-neutral-950/20 sm:grid-cols-4"
+                >
                     <div>
-                        <span class="text-[10px] uppercase font-bold text-muted-foreground">Action Type</span>
-                        <p class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 mt-0.5">
+                        <span class="text-[10px] font-bold uppercase text-muted-foreground">Action Type</span>
+                        <p class="mt-0.5 text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                             {{ selectedLogForJson.action_type }}
                         </p>
                     </div>
                     <div>
-                        <span class="text-[10px] uppercase font-bold text-muted-foreground">Target Product</span>
-                        <p class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 mt-0.5 truncate">
+                        <span class="text-[10px] font-bold uppercase text-muted-foreground">Target Product</span>
+                        <p class="mt-0.5 truncate text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                             {{ selectedLogForJson.product ? selectedLogForJson.product.sku : 'System Routine' }}
                         </p>
                     </div>
                     <div>
-                        <span class="text-[10px] uppercase font-bold text-muted-foreground">Decision Rule</span>
-                        <p class="text-xs font-semibold text-neutral-800 dark:text-neutral-200 mt-0.5 truncate font-mono">
+                        <span class="text-[10px] font-bold uppercase text-muted-foreground">Decision Rule</span>
+                        <p class="mt-0.5 truncate font-mono text-xs font-semibold text-neutral-800 dark:text-neutral-200">
                             {{ selectedLogForJson.payload.rule || 'expiring_threshold' }}
                         </p>
                     </div>
                     <div>
-                        <span class="text-[10px] uppercase font-bold text-muted-foreground">Execution Status</span>
-                        <p class="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                        <span class="text-[10px] font-bold uppercase text-muted-foreground">Execution Status</span>
+                        <p class="mt-0.5 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                             <span class="size-1.5 rounded-full bg-emerald-500"></span>
                             {{ selectedLogForJson.status }}
                         </p>
@@ -960,19 +1006,19 @@ const submitManualOverride = () => {
                 </div>
 
                 <!-- Code Canvas Body -->
-                <div class="flex-1 overflow-auto p-6 bg-neutral-950 font-mono text-xs text-neutral-200">
-                    <pre class="leading-relaxed whitespace-pre-wrap"><code v-html="syntaxHighlightedJson"></code></pre>
+                <div class="flex-1 overflow-auto bg-neutral-950 p-6 font-mono text-xs text-neutral-200">
+                    <pre class="whitespace-pre-wrap leading-relaxed"><code v-html="syntaxHighlightedJson"></code></pre>
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="flex items-center justify-between border-t border-neutral-200 dark:border-neutral-800 px-6 py-3.5 bg-neutral-50/70 dark:bg-neutral-950/40">
-                    <span class="text-xs text-muted-foreground">
-                        Payload size: {{ formattedJsonString.length }} bytes
-                    </span>
+                <div
+                    class="flex items-center justify-between border-t border-neutral-200 bg-neutral-50/70 px-6 py-3.5 dark:border-neutral-800 dark:bg-neutral-950/40"
+                >
+                    <span class="text-xs text-muted-foreground"> Payload size: {{ formattedJsonString.length }} bytes </span>
                     <button
                         @click="closeJsonModal"
                         type="button"
-                        class="rounded-xl bg-neutral-900 dark:bg-neutral-100 px-4 py-2 text-xs font-semibold text-white dark:text-neutral-900 shadow-sm transition hover:opacity-90"
+                        class="rounded-xl bg-neutral-900 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-neutral-100 dark:text-neutral-900"
                     >
                         Close Viewer
                     </button>
@@ -988,11 +1034,13 @@ const submitManualOverride = () => {
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-all"
         >
             <div
-                class="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-2xl overflow-hidden"
+                class="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900"
                 @click.stop
             >
                 <!-- Modal Header -->
-                <div class="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 px-6 py-4 bg-violet-50/40 dark:bg-violet-950/20">
+                <div
+                    class="flex items-center justify-between border-b border-neutral-200 bg-violet-50/40 px-6 py-4 dark:border-neutral-800 dark:bg-violet-950/20"
+                >
                     <div class="flex items-center gap-3">
                         <div class="flex size-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400">
                             <ShieldAlert class="size-5" />
@@ -1001,58 +1049,59 @@ const submitManualOverride = () => {
                             <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">
                                 Manual Override: Log #{{ selectedLogForOverride.id }}
                             </h3>
-                            <p class="text-xs text-muted-foreground">
-                                Adjust or revert automated decisions with competition audit accountability.
-                            </p>
+                            <p class="text-xs text-muted-foreground">Adjust or revert automated decisions with competition audit accountability.</p>
                         </div>
                     </div>
                     <button
                         @click="closeOverrideModal"
                         type="button"
-                        class="rounded-xl p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition"
+                        class="rounded-xl p-2 text-neutral-400 transition hover:bg-neutral-100 dark:hover:bg-neutral-800"
                     >
                         <X class="size-5" />
                     </button>
                 </div>
 
                 <!-- Modal Body -->
-                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                <div class="flex-1 space-y-5 overflow-y-auto p-6">
                     <!-- Context Summary Card -->
-                    <div class="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-950/50 p-3.5 text-xs">
-                        <div class="flex justify-between items-start">
+                    <div class="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 text-xs dark:border-neutral-800 dark:bg-neutral-950/50">
+                        <div class="flex items-start justify-between">
                             <div>
                                 <span class="font-mono font-bold text-neutral-900 dark:text-neutral-100">
                                     {{ selectedLogForOverride.product?.sku }}
                                 </span>
-                                <p class="font-medium text-neutral-700 dark:text-neutral-300 mt-0.5">
+                                <p class="mt-0.5 font-medium text-neutral-700 dark:text-neutral-300">
                                     {{ selectedLogForOverride.product?.name }}
                                 </p>
                             </div>
-                            <span class="rounded bg-neutral-200 dark:bg-neutral-800 px-2 py-0.5 font-semibold text-[10px]">
+                            <span class="rounded bg-neutral-200 px-2 py-0.5 text-[10px] font-semibold dark:bg-neutral-800">
                                 Current: {{ selectedLogForOverride.action_type }}
                             </span>
                         </div>
-                        <p class="text-muted-foreground mt-2 italic text-[11px] line-clamp-2">
-                            "{{ selectedLogForOverride.reasoning }}"
-                        </p>
+                        <p class="mt-2 line-clamp-2 text-[11px] italic text-muted-foreground">"{{ selectedLogForOverride.reasoning }}"</p>
                     </div>
 
                     <!-- Error Alert inside modal -->
-                    <div v-if="overrideErrorMessage" class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                    <div
+                        v-if="overrideErrorMessage"
+                        class="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-700 dark:text-rose-300"
+                    >
                         <AlertCircle class="size-4 shrink-0" />
                         <span>{{ overrideErrorMessage }}</span>
                     </div>
 
                     <!-- Override Action Selector -->
                     <div>
-                        <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-2">
-                            Select Override Strategy
-                        </label>
+                        <label class="mb-2 block text-xs font-semibold text-neutral-700 dark:text-neutral-300"> Select Override Strategy </label>
                         <div class="space-y-2">
                             <!-- Revert Option -->
                             <label
-                                class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition"
-                                :class="overrideAction === 'revert' ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40'"
+                                class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition"
+                                :class="
+                                    overrideAction === 'revert'
+                                        ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
+                                        : 'border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40'
+                                "
                             >
                                 <input
                                     type="radio"
@@ -1062,10 +1111,8 @@ const submitManualOverride = () => {
                                     class="mt-0.5 text-emerald-600 focus:ring-emerald-500"
                                 />
                                 <div>
-                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100">
-                                        Revert Decision to Normal Stock
-                                    </span>
-                                    <p class="text-[11px] text-muted-foreground mt-0.5">
+                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100"> Revert Decision to Normal Stock </span>
+                                    <p class="mt-0.5 text-[11px] text-muted-foreground">
                                         Cancels discount or donation reservation, restoring product to active inventory.
                                     </p>
                                 </div>
@@ -1074,8 +1121,12 @@ const submitManualOverride = () => {
                             <!-- Modify Discount Option (if applicable) -->
                             <label
                                 v-if="selectedLogForOverride.action_type === 'discount_applied'"
-                                class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition"
-                                :class="overrideAction === 'modify_discount' ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40'"
+                                class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition"
+                                :class="
+                                    overrideAction === 'modify_discount'
+                                        ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
+                                        : 'border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40'
+                                "
                             >
                                 <input
                                     type="radio"
@@ -1085,20 +1136,20 @@ const submitManualOverride = () => {
                                     class="mt-0.5 text-emerald-600 focus:ring-emerald-500"
                                 />
                                 <div>
-                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100">
-                                        Adjust Markdown Percentage
-                                    </span>
-                                    <p class="text-[11px] text-muted-foreground mt-0.5">
-                                        Change the dynamic discount rate to a custom percentage.
-                                    </p>
+                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100"> Adjust Markdown Percentage </span>
+                                    <p class="mt-0.5 text-[11px] text-muted-foreground">Change the dynamic discount rate to a custom percentage.</p>
                                 </div>
                             </label>
 
                             <!-- Reassign Partner Option (if applicable) -->
                             <label
                                 v-if="selectedLogForOverride.action_type === 'donation_requested'"
-                                class="flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition"
-                                :class="overrideAction === 'reassign_partner' ? 'border-sky-500 bg-sky-50/30 dark:bg-sky-950/20' : 'border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40'"
+                                class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition"
+                                :class="
+                                    overrideAction === 'reassign_partner'
+                                        ? 'border-sky-500 bg-sky-50/30 dark:bg-sky-950/20'
+                                        : 'border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40'
+                                "
                             >
                                 <input
                                     type="radio"
@@ -1108,10 +1159,8 @@ const submitManualOverride = () => {
                                     class="mt-0.5 text-sky-600 focus:ring-sky-500"
                                 />
                                 <div>
-                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100">
-                                        Reassign Donation Partner
-                                    </span>
-                                    <p class="text-[11px] text-muted-foreground mt-0.5">
+                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100"> Reassign Donation Partner </span>
+                                    <p class="mt-0.5 text-[11px] text-muted-foreground">
                                         Route the surplus batch to an alternate verified non-profit charity.
                                     </p>
                                 </div>
@@ -1120,20 +1169,16 @@ const submitManualOverride = () => {
                     </div>
 
                     <!-- Dynamic field: Discount Percentage Slider & Preview -->
-                    <div v-if="overrideAction === 'modify_discount'" class="space-y-2 rounded-xl bg-neutral-50 dark:bg-neutral-950 p-4 border border-neutral-200 dark:border-neutral-800">
-                        <div class="flex justify-between items-center text-xs">
+                    <div
+                        v-if="overrideAction === 'modify_discount'"
+                        class="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950"
+                    >
+                        <div class="flex items-center justify-between text-xs">
                             <span class="font-medium text-neutral-700 dark:text-neutral-300">New Discount Rate:</span>
-                            <span class="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{{ overrideDiscountPercentage }}% OFF</span>
+                            <span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">{{ overrideDiscountPercentage }}% OFF</span>
                         </div>
-                        <input
-                            type="range"
-                            min="5"
-                            max="90"
-                            step="5"
-                            v-model.number="overrideDiscountPercentage"
-                            class="w-full accent-emerald-600"
-                        />
-                        <div class="flex justify-between text-[11px] text-muted-foreground mt-1">
+                        <input type="range" min="5" max="90" step="5" v-model.number="overrideDiscountPercentage" class="w-full accent-emerald-600" />
+                        <div class="mt-1 flex justify-between text-[11px] text-muted-foreground">
                             <span>Original: ${{ Number(selectedLogForOverride.product?.original_price || 0).toFixed(2) }}</span>
                             <span class="font-semibold text-foreground">New Price: ${{ previewModifiedPrice }}</span>
                         </div>
@@ -1141,12 +1186,10 @@ const submitManualOverride = () => {
 
                     <!-- Dynamic field: Reassign Partner Dropdown -->
                     <div v-if="overrideAction === 'reassign_partner'" class="space-y-1.5">
-                        <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                            Select New Donation Partner
-                        </label>
+                        <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300"> Select New Donation Partner </label>
                         <select
                             v-model="overridePartnerId"
-                            class="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3.5 py-2 text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+                            class="w-full rounded-xl border border-neutral-200 bg-white px-3.5 py-2 text-xs text-neutral-900 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 sm:text-sm"
                         >
                             <option value="" disabled>Choose verified recipient...</option>
                             <option v-for="partner in partners" :key="partner.id" :value="partner.id">
@@ -1157,24 +1200,26 @@ const submitManualOverride = () => {
 
                     <!-- Justification / Reason Textarea -->
                     <div>
-                        <label class="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                        <label class="mb-1 block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
                             Override Rationale / Justification <span class="text-rose-500">*</span>
                         </label>
                         <textarea
                             v-model="overrideReason"
                             rows="3"
                             placeholder="State the regulatory or operational reason for modifying this autonomous decision..."
-                            class="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-3 text-xs sm:text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-muted-foreground focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 transition"
+                            class="w-full rounded-xl border border-neutral-200 bg-white p-3 text-xs text-neutral-900 transition placeholder:text-muted-foreground focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100 sm:text-sm"
                         ></textarea>
                     </div>
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="flex items-center justify-end gap-2.5 border-t border-neutral-200 dark:border-neutral-800 px-6 py-4 bg-neutral-50/70 dark:bg-neutral-950/40">
+                <div
+                    class="flex items-center justify-end gap-2.5 border-t border-neutral-200 bg-neutral-50/70 px-6 py-4 dark:border-neutral-800 dark:bg-neutral-950/40"
+                >
                     <button
                         @click="closeOverrideModal"
                         type="button"
-                        class="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-800 px-4 py-2 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50"
+                        class="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800 dark:text-neutral-300"
                     >
                         Cancel
                     </button>
@@ -1182,7 +1227,7 @@ const submitManualOverride = () => {
                         :disabled="isSubmittingOverride"
                         @click="submitManualOverride"
                         type="button"
-                        class="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-500 active:translate-y-0.5 disabled:opacity-60 transition"
+                        class="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-violet-500 active:translate-y-0.5 disabled:opacity-60"
                     >
                         <RefreshCw v-if="isSubmittingOverride" class="size-3.5 animate-spin" />
                         <ShieldCheck v-else class="size-3.5" />
