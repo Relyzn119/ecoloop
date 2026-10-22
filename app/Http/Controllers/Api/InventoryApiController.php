@@ -7,6 +7,8 @@ use App\Http\Requests\Api\ApplyDiscountRequest;
 use App\Http\Requests\Api\GetExpiringProductsRequest;
 use App\Http\Requests\Api\ReserveDonationRequest;
 use App\Http\Resources\ProductResource;
+use App\Models\Product;
+use App\Services\AiAgentService;
 use App\Services\InventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +39,20 @@ class InventoryApiController extends Controller
                 'total_count' => $products->count(),
             ],
             'data' => ProductResource::collection($products),
+        ], Response::HTTP_OK);
+    }
+
+    /**
+     * Retrieve one product for an external inventory automation.
+     */
+    public function showProduct(Product $product): JsonResponse
+    {
+        $product->load('category:id,name,slug');
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Product retrieved successfully.',
+            'data' => new ProductResource($product),
         ], Response::HTTP_OK);
     }
 
@@ -91,6 +107,7 @@ class InventoryApiController extends Controller
                 'providers' => [
                     'gemini' => ! empty(env('GEMINI_API_KEY')),
                     'groq' => ! empty(env('GROQ_API_KEY')),
+                    '9router' => app(AiAgentService::class)->hasNineRouterKey(),
                     'n8n_webhook' => ! empty(env('N8N_WEBHOOK_URL')),
                 ],
                 'features' => [
@@ -100,6 +117,33 @@ class InventoryApiController extends Controller
                 ],
                 'timestamp' => now()->toIso8601String(),
             ],
+        ], Response::HTTP_OK);
+    }
+
+    /**
+     * Evaluate one product for n8n without applying inventory changes.
+     */
+    public function evaluateProduct(Request $request, AiAgentService $aiAgentService): JsonResponse
+    {
+        $validated = $request->validate([
+            'product_id' => ['required', 'integer', 'min:1', 'exists:products,id'],
+        ]);
+
+        $product = Product::query()
+            ->with('category:id,name,slug')
+            ->findOrFail($validated['product_id']);
+
+        $decision = $aiAgentService->evaluateProduct($product, '9router');
+
+        return response()->json([
+            'success' => true,
+            'product_id' => $product->id,
+            'name' => $product->name,
+            'product_name' => $product->name,
+            'expiration_date' => $product->expiration_date?->toDateString(),
+            'quantity' => $product->quantity,
+            'original_price' => (float) $product->original_price,
+            ...$decision,
         ], Response::HTTP_OK);
     }
 

@@ -1,0 +1,1332 @@
+{
+  "name": "EcoLoop Agent - Laravel Integration (AI Pending)",
+  "nodes": [
+    {
+      "webhookId": "f0110001-0000-4000-8000-000000000011",
+      "parameters": {
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "path": "ecoloop-scan",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "name": "EcoLoop Scan (POST)",
+      "id": "f0110001-0000-4000-8000-000000000001",
+      "position": [
+        260,
+        260
+      ],
+      "typeVersion": 2.1
+    },
+    {
+      "webhookId": "f0110001-0000-4000-8000-000000000012",
+      "parameters": {
+        "httpMethod": "GET",
+        "responseMode": "onReceived",
+        "path": "ecoloop-scan",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "name": "EcoLoop Scan (GET)",
+      "id": "f0110001-0000-4000-8000-000000000002",
+      "position": [
+        260,
+        460
+      ],
+      "typeVersion": 2.1
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst headers = input.headers ?? {};\nconst query = input.query ?? {};\nconst body = input.body ?? {};\nconst normalizedHeaders = Object.fromEntries(Object.entries(headers).map(([key,value])=>[key.toLowerCase(),value]));\nconst scanId = body.scanId ?? query.scanId;\nconst imageUrl = body.imageUrl ?? query.imageUrl;\nconst contentType = String(normalizedHeaders['content-type'] ?? '').toLowerCase();\nif (!scanId || typeof scanId !== 'string') throw new Error('Missing or invalid scanId.');\nif (!imageUrl || typeof imageUrl !== 'string') throw new Error('Missing or invalid imageUrl.');\nif (input.method === 'POST' && contentType && !contentType.includes('application/json')) throw new Error('POST requests must use Content-Type: application/json.');\nreturn [{json:{valid:true,request:{method:input.method,scanId,imageUrl,headers:normalizedHeaders},integration:{ai_model_configured:false}}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "name": "Validate Scan Request",
+      "id": "f0110001-0000-4000-8000-000000000003",
+      "position": [
+        560,
+        360
+      ],
+      "typeVersion": 2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000004",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "expression": "0 0 * * *",
+              "field": "cronExpression"
+            }
+          ]
+        }
+      },
+      "name": "Daily Expiring Inventory (UTC)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        260,
+        700
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000005",
+      "parameters": {
+        "headerParameters": {
+          "parameters": [
+            {
+              "value": "application/json",
+              "name": "Accept"
+            }
+          ]
+        },
+        "options": {},
+        "sendHeaders": true,
+        "method": "GET",
+        "url": "http://ecoloop.test/api/v1/inventory/expiring-soon?days=7"
+      },
+      "alwaysOutputData": true,
+      "name": "Fetch Expiring Inventory",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        520,
+        700
+      ],
+      "typeVersion": 4.2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000006",
+      "parameters": {
+        "jsCode": "const rows = $input.all().flatMap(({ json }) => {\n  if (Array.isArray(json)) return json;\n  if (Array.isArray(json.data)) return json.data;\n  return json && Object.keys(json).length ? [json] : [];\n});\nreturn [{ json: { items: rows, count: rows.length } }];",
+        "mode": "runOnceForAllItems"
+      },
+      "name": "Normalize Inventory Results",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        780,
+        700
+      ],
+      "typeVersion": 2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000007",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "typeValidation": "strict",
+            "leftValue": "",
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "a58ff816-ffb8-4d3e-9fc4-23081a556001",
+              "operator": {
+                "operation": "gt",
+                "type": "number"
+              },
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Check Items Found",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        1040,
+        700
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000008",
+      "parameters": {},
+      "name": "No Expiring Items",
+      "type": "n8n-nodes-base.noOp",
+      "position": [
+        1300,
+        880
+      ],
+      "typeVersion": 1
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000009",
+      "parameters": {
+        "options": {},
+        "fieldToSplitOut": "items"
+      },
+      "name": "Split Inventory Items",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [
+        1300,
+        620
+      ],
+      "typeVersion": 1
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000012",
+      "position": [
+        2100,
+        620
+      ],
+      "type": "n8n-nodes-base.switch",
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "Discount",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "id": "f0330001-0000-4000-8000-000000000001",
+                    "rightValue": "discount",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    }
+                  }
+                ],
+                "options": {
+                  "leftValue": "",
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "Donate",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "id": "f0330001-0000-4000-8000-000000000002",
+                    "rightValue": "donate",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    }
+                  }
+                ],
+                "options": {
+                  "leftValue": "",
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "No Action",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "id": "f0330001-0000-4000-8000-000000000003",
+                    "rightValue": "none",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    }
+                  }
+                ],
+                "options": {
+                  "leftValue": "",
+                  "version": 2,
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                }
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Route AI Decision",
+      "typeVersion": 3.2
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000015",
+      "position": [
+        2360,
+        740
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "parameters": {},
+      "name": "No Action - NoOp",
+      "typeVersion": 1
+    },
+    {
+      "typeVersion": 4.2,
+      "position": [
+        2620,
+        500
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Execute Discount Callback",
+      "id": "f0110001-0000-4000-8000-000000000016",
+      "parameters": {
+        "jsonBody": "={{ ({ product_id: $json.product_id, discount_percentage: $json.discount_percentage, reason: $json.reasoning }) }}",
+        "sendBody": true,
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "value": "application/json",
+              "name": "Content-Type"
+            },
+            {
+              "value": "application/json",
+              "name": "Accept"
+            }
+          ]
+        },
+        "url": "http://ecoloop.test/api/v1/inventory/apply-discount",
+        "specifyBody": "json"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "typeVersion": 2,
+      "position": [
+        2880,
+        500
+      ],
+      "type": "n8n-nodes-base.code",
+      "name": "Format Discount Log Response",
+      "id": "f0110001-0000-4000-8000-000000000017",
+      "parameters": {
+        "jsCode": "const responses = $input.all();\nreturn responses.map((item, index) => {\n  const response = item.json;\n  const decision = $('Route AI Decision').itemMatching(index).json;\n  const statusCode = Number(response.statusCode ?? response.status) || null;\n  const body = response.body ?? {};\n  const success = statusCode === 200 && !response.error && body.success !== false && String(body.status ?? '').toLowerCase() !== 'error';\n  return { json: {\n    event: success ? 'ecoloop_discount_applied' : 'ecoloop_discount_failed',\n    success,\n    action: 'discount',\n    processing_status: success ? 'success' : 'failed',\n    http_status: statusCode,\n    product_id: decision.product_id,\n    discount_percentage: decision.discount_percentage,\n    reason: decision.reasoning,\n    api_message: body.message ?? null,\n    error: success ? null : response.error?.message ?? body.message ?? 'Discount callback did not return HTTP 200.',\n    logged_at: new Date().toISOString(),\n  } };\n});",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "type": "n8n-nodes-base.httpRequest",
+      "id": "f0110001-0000-4000-8000-000000000018",
+      "name": "Reserve Product for Donation",
+      "typeVersion": 4.2,
+      "parameters": {
+        "specifyBody": "json",
+        "sendBody": true,
+        "jsonBody": "={{ ({ product_id: $json.product_id, partner_id: $json.recommended_partner_id || 1, reason: $json.reasoning }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true
+            }
+          }
+        },
+        "url": "http://ecoloop.test/api/v1/inventory/reserve-donation",
+        "sendHeaders": true,
+        "method": "POST",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "position": [
+        2620,
+        620
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "id": "f0110001-0000-4000-8000-000000000019",
+      "name": "Prepare Partner Alert",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const reservations = $input.all();\nreturn reservations.map((item, index) => {\n  const response = item.json;\n  const statusCode = Number(response.statusCode ?? response.status) || null;\n  const body = response.body ?? {};\n  const reservationOk = statusCode !== null && statusCode >= 200 && statusCode < 300 && !response.error && body.success !== false && String(body.status ?? '').toLowerCase() !== 'error';\n  const decision = $('Route AI Decision').itemMatching(index).json;\n  const partnerId = decision.recommended_partner_id || 1;\n  const productName = decision.product_name ?? 'food item';\n  const quantity = decision.quantity ?? 'unspecified';\n  const reason = decision.reasoning ?? 'No reason provided';\n  return { json: {\n    product_id: decision.product_id,\n    product_name: productName,\n    quantity,\n    partner_id: partnerId,\n    action: 'donate',\n    reasoning: reason,\n    reservation_ok: reservationOk,\n    reservation_http_status: statusCode,\n    reservation_error: reservationOk ? null : response.error?.message ?? body.message ?? 'Donation reservation did not return a successful response.',\n    reservation_api_message: body.message ?? null,\n    message: `Urgent Food Rescue Alert: ${quantity} units of ${productName} are reserved for donation. Reason: ${reason}`,\n  } };\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2880,
+        620
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "id": "f0110001-0000-4000-8000-000000000020",
+      "name": "Dispatch Partner Alert",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map(item => ({json:{statusCode:200, body:{success:true,status:'simulated'}, partner_id:item.json.partner_id, message:item.json.message, notification_payload:{partner_id:item.json.partner_id,message:item.json.message}, simulated:true}}));"
+      },
+      "position": [
+        3140,
+        620
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.if",
+      "id": "f0110001-0000-4000-8000-000000000021",
+      "name": "Check Partner Alert Result",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "leftValue": "={{ $json.statusCode >= 200 && $json.statusCode < 300 && !$json.error && $json.body?.success !== false && String($json.body?.status ?? \"\").toLowerCase() !== \"error\" }}",
+              "id": "b6edfe65-81af-40a6-b3cd-6f4500000001"
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "version": 2,
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        3400,
+        620
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "id": "f0110001-0000-4000-8000-000000000022",
+      "name": "Log Partner Alert Success",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const responses = $input.all();\nreturn responses.map((item, index) => {\n  const payload = $('Prepare Partner Alert').itemMatching(index).json;\n  return { json: {\n    event: 'partner_alert_dispatched',\n    success: true,\n    action: 'donate',\n    processing_status: 'success',\n    http_status: Number(item.json.statusCode),\n    product_id: payload.product_id,\n    partner_id: payload.partner_id,\n    notification_payload: { partner_id: payload.partner_id, message: payload.message },\n    logged_at: new Date().toISOString(),\n  } };\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3660,
+        540
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "id": "f0110001-0000-4000-8000-000000000023",
+      "name": "Log Partner Alert Failure",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const responses = $input.all();\nreturn responses.map((item, index) => {\n  const payload = $('Prepare Partner Alert').itemMatching(index).json;\n  return { json: {\n    event: 'partner_alert_failed',\n    success: false,\n    action: 'donate',\n    processing_status: 'failed',\n    http_status: Number(item.json.statusCode ?? item.json.status) || null,\n    product_id: payload.product_id,\n    partner_id: payload.partner_id,\n    notification_payload: { partner_id: payload.partner_id, message: payload.message },\n    error: item.json.error?.message ?? item.json.body?.message ?? 'Notification returned a non-2xx response.',\n    logged_at: new Date().toISOString(),\n  } };\n});",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3660,
+        700
+      ]
+    },
+    {
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "version": 2,
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": {
+                "operation": "true",
+                "type": "boolean"
+              },
+              "id": "84b8355d-b746-4c3b-b45e-1f4400000001",
+              "leftValue": "={{ $json.reservation_ok }}",
+              "rightValue": true
+            }
+          ]
+        }
+      },
+      "name": "Check Donation Reservation",
+      "position": [
+        3140,
+        620
+      ],
+      "typeVersion": 2.2,
+      "id": "f0110001-0000-4000-8000-000000000026"
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "const items = $input.all();\nreturn items.map(item => ({ json: {\n  event: 'donation_reservation_failed',\n  success: false,\n  action: 'donate',\n  processing_status: 'failed',\n  product_id: item.json.product_id,\n  partner_id: item.json.partner_id,\n  http_status: item.json.reservation_http_status,\n  error: item.json.reservation_error,\n  logged_at: new Date().toISOString(),\n} }));",
+        "mode": "runOnceForAllItems"
+      },
+      "name": "Log Donation Reservation Failure",
+      "position": [
+        3400,
+        820
+      ],
+      "typeVersion": 2,
+      "id": "f0110001-0000-4000-8000-000000000027"
+    },
+    {
+      "type": "n8n-nodes-base.merge",
+      "parameters": {
+        "options": {},
+        "numberInputs": 6,
+        "mode": "append"
+      },
+      "name": "Merge Branch Results",
+      "position": [
+        3920,
+        700
+      ],
+      "typeVersion": 3.2,
+      "id": "f0110001-0000-4000-8000-000000000028"
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "const eligible = $input.all().map(item => item.json).filter(item => ['discount', 'donate', 'none'].includes(item.action));\nconst count = action => eligible.filter(item => item.action === action).length;\nconst totalFailed = eligible.filter(item => item.processing_status === 'failed').length;\nreturn [{ json: {\n  execution_time: new Date().toISOString(),\n  total_processed: eligible.length,\n  total_discounted: count('discount'),\n  total_donated: count('donate'),\n  total_skipped: count('none'),\n  total_failed: totalFailed,\n  status: 'success',\n} }];",
+        "mode": "runOnceForAllItems"
+      },
+      "name": "Aggregate Execution Summary",
+      "position": [
+        4180,
+        700
+      ],
+      "typeVersion": 2,
+      "id": "f0110001-0000-4000-8000-000000000029"
+    },
+    {
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "specifyBody": "json",
+        "url": "http://ecoloop.test/api/v1/agent-logs/summary",
+        "method": "POST",
+        "sendBody": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "value": "application/json",
+              "name": "Content-Type"
+            },
+            {
+              "value": "application/json",
+              "name": "Accept"
+            }
+          ]
+        },
+        "options": {},
+        "jsonBody": "={{ ({ execution_id: $execution.id, execution_time: $json.execution_time, total_processed: $json.total_processed, total_discounted: $json.total_discounted, total_donated: $json.total_donated, total_skipped: $json.total_skipped, total_failed: $json.total_failed, status: $json.status }) }}",
+        "sendHeaders": true
+      },
+      "name": "Post Summary to Laravel",
+      "position": [
+        4440,
+        700
+      ],
+      "typeVersion": 4.2,
+      "id": "f0110001-0000-4000-8000-000000000030"
+    },
+    {
+      "id": "demo-001",
+      "name": "Live Demo Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        1120
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ecoloop-demo-trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "d3e00001-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "demo-002",
+      "name": "Validate Demo Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        1120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body ?? {};\nconst id = body.product_id;\nif (id === undefined || id === null || !/^\\d+$/.test(String(id))) throw new Error('Provide a positive integer product_id in the JSON body.');\nreturn [{json:{product_id:Number(id)}}];"
+      }
+    },
+    {
+      "id": "demo-003",
+      "name": "Fetch Demo Product",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        740,
+        1120
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'http://ecoloop.test/api/v1/products/' + $json.product_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "id": "demo-004",
+      "name": "Normalize Demo Product",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        1120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst payload = item.body ?? item;\nconst product = payload.data ?? payload.product ?? payload;\nconst id = product.product_id ?? product.id ?? $('Validate Demo Request').first().json.product_id;\nif (id === undefined || id === null) throw new Error('Laravel product response is missing an id.');\nreturn [{json:{product_id:id, name:product.name ?? product.product_name ?? '', product_name:product.product_name ?? product.name ?? '', expiration_date:product.expiration_date ?? null, quantity:product.quantity ?? null, original_price:product.original_price ?? product.price ?? null, recommended_partner_id:product.recommended_partner_id ?? null}}];"
+      }
+    },
+    {
+      "id": "demo-007",
+      "name": "Route Live Demo Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1760,
+        1120
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "discount",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "discount",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "donate",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "donate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "renameOutput": true
+            },
+            {
+              "outputKey": "none",
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "none",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "renameOutput": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "demo-008",
+      "name": "Execute Live Demo Discount",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        1010
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ecoloop.test/api/v1/inventory/apply-discount",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ product_id: $json.product_id, discount_percentage: $json.discount_percentage, reason: $json.reasoning }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "demo-009",
+      "name": "Reserve Live Demo Donation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2020,
+        1120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ecoloop.test/api/v1/inventory/reserve-donation",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ product_id: $json.product_id, partner_id: $json.recommended_partner_id || 1, reason: $json.reasoning }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "demo-010",
+      "name": "Format Live Demo Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2280,
+        1120
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json;\nconst decision = $('Route Live Demo Decision').item.json;\nconst isNoAction = decision.action === 'none';\nconst status = Number(response.statusCode ?? response.status) || null;\nconst body = response.body ?? {};\nconst apiOk = isNoAction || (status !== null && status >= 200 && status < 300 && !response.error && body.success !== false && String(body.status ?? '').toLowerCase() !== 'error');\nreturn [{json:{success:apiOk, product_id:decision.product_id, action_taken:decision.action, reasoning:decision.reasoning, timestamp:new Date().toISOString(), total_processed:1, total_discounted:decision.action === 'discount' ? 1 : 0, total_donated:decision.action === 'donate' ? 1 : 0, total_skipped:decision.action === 'none' ? 1 : 0, status:apiOk ? 'success' : 'failed'}}];"
+      }
+    },
+    {
+      "id": "demo-011",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2520,
+        1120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "f0110001-0000-4000-8000-000000000010",
+      "name": "Evaluate Inventory via 9Router",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        620
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ecoloop.test/api/v1/ai/evaluate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ product_id: $json.product_id ?? $json.id }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 35000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "stopWorkflow"
+    },
+    {
+      "id": "demo-005",
+      "name": "Evaluate Product via 9Router (Demo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1260,
+        1120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ecoloop.test/api/v1/ai/evaluate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ product_id: $json.product_id ?? $json.id }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 35000,
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "onError": "stopWorkflow"
+    }
+  ],
+  "connections": {
+    "EcoLoop Scan (GET)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "Validate Scan Request"
+          }
+        ]
+      ]
+    },
+    "EcoLoop Scan (POST)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "type": "main",
+            "node": "Validate Scan Request"
+          }
+        ]
+      ]
+    },
+    "Daily Expiring Inventory (UTC)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Fetch Expiring Inventory",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Fetch Expiring Inventory": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Normalize Inventory Results",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Normalize Inventory Results": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check Items Found",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check Items Found": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Split Inventory Items",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "No Expiring Items",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Split Inventory Items": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Inventory via 9Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route AI Decision": {
+      "main": [
+        [
+          {
+            "node": "Execute Discount Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reserve Product for Donation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action - NoOp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Action - NoOp": {
+      "main": [
+        [
+          {
+            "node": "Merge Branch Results",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Execute Discount Callback": {
+      "main": [
+        [
+          {
+            "node": "Format Discount Log Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Discount Log Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Branch Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve Product for Donation": {
+      "main": [
+        [
+          {
+            "node": "Prepare Partner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Partner Alert": {
+      "main": [
+        [
+          {
+            "node": "Check Donation Reservation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch Partner Alert": {
+      "main": [
+        [
+          {
+            "node": "Check Partner Alert Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Partner Alert Result": {
+      "main": [
+        [
+          {
+            "node": "Log Partner Alert Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Partner Alert Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Partner Alert Success": {
+      "main": [
+        [
+          {
+            "node": "Merge Branch Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Log Partner Alert Failure": {
+      "main": [
+        [
+          {
+            "node": "Merge Branch Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Check Donation Reservation": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Partner Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Donation Reservation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Donation Reservation Failure": {
+      "main": [
+        [
+          {
+            "node": "Merge Branch Results",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Branch Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Execution Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Execution Summary": {
+      "main": [
+        [
+          {
+            "node": "Post Summary to Laravel",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Summary to Laravel": {
+      "main": [
+        []
+      ]
+    },
+    "No Expiring Items": {
+      "main": [
+        [
+          {
+            "index": 5,
+            "type": "main",
+            "node": "Merge Branch Results"
+          }
+        ]
+      ]
+    },
+    "Live Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Demo Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Demo Request": {
+      "main": [
+        [
+          {
+            "node": "Fetch Demo Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Demo Product": {
+      "main": [
+        [
+          {
+            "node": "Normalize Demo Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Demo Product": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Product via 9Router (Demo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Live Demo Decision": {
+      "main": [
+        [
+          {
+            "node": "Execute Live Demo Discount",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reserve Live Demo Donation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Live Demo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Live Demo Discount": {
+      "main": [
+        [
+          {
+            "node": "Format Live Demo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve Live Demo Donation": {
+      "main": [
+        [
+          {
+            "node": "Format Live Demo Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Live Demo Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "AI Evaluator (Model Pending)": {
+      "main": [
+        [
+          {
+            "node": "Route AI Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Evaluator (Model Pending) - Demo": {
+      "main": [
+        [
+          {
+            "node": "Route Live Demo Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC"
+  },
+  "versionId": "f0110001-0000-4000-8000-000000000021",
+  "id": "7f64f822-7041-4ba4-a7e0-ec0100100001",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

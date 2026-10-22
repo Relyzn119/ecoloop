@@ -132,8 +132,8 @@ class InventoryService
     }
 
     /**
-     * Autonomous Mock AI simulation runner for local testing and demonstration.
-     * Evaluates expiring items and applies intelligent markdowns or donation reserves.
+     * Evaluate expiring inventory with the configured AI provider and execute
+     * the resulting inventory actions.
      *
      * @param  int  $daysThreshold  Threshold in days to analyze
      * @return array<string, mixed>
@@ -141,21 +141,62 @@ class InventoryService
     public function simulateAiEvaluation(int $daysThreshold = 3): array
     {
         $expiring = $this->getExpiringProducts($daysThreshold);
-        $partner = DonationPartner::query()->where('is_active', true)->first();
+        $aiAgentService = app(AiAgentService::class);
 
         $actionsTaken = [];
+        $skipped = [];
 
         foreach ($expiring as $product) {
-            $daysLeft = (int) now()->startOfDay()->diffInDays($product->expiration_date, false);
+            $decision = $aiAgentService->evaluateProduct($product, '9router');
+            $reason = (string) ($decision['reasoning'] ?? 'Evaluated by EcoLoop AI.');
 
-            if ($daysLeft <= 1 && $partner && $product->status !== 'reserved_donation') {
-                // Reserve for donation if less than 24-48 hours remaining
-                $reason = sprintf(
-                    'Autonomous AI Decision: %s has only %d day(s) shelf life remaining. Reserved for immediate cold-chain pickup by %s to eliminate organic landfill waste.',
-                    $product->name,
-                    max(0, $daysLeft),
-                    $partner->name
-                );
+            // A deterministic fallback is useful for a single-product preview,
+            // but do not let it make unattended inventory changes in a batch run.
+            if (($decision['provider'] ?? null) !== '9router') {
+                $skipped[] = [
+                    'product_id' => $product->id,
+                    'sku' => $product->sku,
+                    'name' => $product->name,
+                    'reason' => '9Router did not return a live model decision; no inventory change was applied.',
+                ];
+
+                continue;
+            }
+
+            if ($decision['action'] === 'discount' && $product->status === 'active') {
+                $discountPercentage = (float) ($decision['discount_percentage'] ?? 0);
+                if ($discountPercentage <= 0 || $discountPercentage > 50) {
+                    continue;
+                }
+
+                $updated = $this->applyDiscount($product->id, $discountPercentage, $reason);
+
+                $actionsTaken[] = [
+                    'action' => 'apply_discount',
+                    'product_id' => $updated->id,
+                    'sku' => $updated->sku,
+                    'name' => $updated->name,
+                    'discount_percentage' => $discountPercentage,
+                    'discount_price' => $updated->discount_price,
+                    'provider' => $decision['provider'] ?? 'unknown',
+                    'reason' => $reason,
+                ];
+            } elseif ($decision['action'] === 'donate' && $product->status !== 'reserved_donation') {
+                $partnerId = $decision['recommended_partner_id']
+                    ?? DonationPartner::query()->where('is_active', true)->value('id');
+
+                if (! $partnerId) {
+                    continue;
+                }
+
+                $partner = DonationPartner::query()
+                    ->whereKey($partnerId)
+                    ->where('is_active', true)
+                    ->first();
+
+                if (! $partner) {
+                    continue;
+                }
 
                 $updated = $this->reserveForDonation($product->id, $partner->id, $reason);
 
@@ -165,27 +206,7 @@ class InventoryService
                     'sku' => $updated->sku,
                     'name' => $updated->name,
                     'partner' => $partner->name,
-                    'reason' => $reason,
-                ];
-            } elseif ($daysLeft <= 3 && $product->status === 'active') {
-                // Apply dynamic 40% discount for items within 3 days
-                $discountPct = $daysLeft <= 2 ? 50.0 : 30.0;
-                $reason = sprintf(
-                    'Autonomous AI Decision: %s shelf-life is %d days. Applied %.0f%% dynamic promotional markdown to maximize customer clearance velocity.',
-                    $product->name,
-                    $daysLeft,
-                    $discountPct
-                );
-
-                $updated = $this->applyDiscount($product->id, $discountPct, $reason);
-
-                $actionsTaken[] = [
-                    'action' => 'apply_discount',
-                    'product_id' => $updated->id,
-                    'sku' => $updated->sku,
-                    'name' => $updated->name,
-                    'discount_percentage' => $discountPct,
-                    'discount_price' => $updated->discount_price,
+                    'provider' => $decision['provider'] ?? 'unknown',
                     'reason' => $reason,
                 ];
             }
@@ -195,6 +216,8 @@ class InventoryService
             'analyzed_count' => $expiring->count(),
             'actions_count' => count($actionsTaken),
             'actions' => $actionsTaken,
+            'skipped_count' => count($skipped),
+            'skipped' => $skipped,
             'simulated_at' => now()->toIso8601String(),
         ];
     }

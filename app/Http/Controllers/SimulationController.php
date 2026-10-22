@@ -49,7 +49,7 @@ class SimulationController extends Controller
 
         $partners = DonationPartner::query()
             ->where('is_active', true)
-            ->select(['id', 'name', 'contact_person', 'email', 'phone', 'impact_score'])
+            ->select(['id', 'name', 'contact_person', 'email', 'phone'])
             ->orderBy('name')
             ->get();
 

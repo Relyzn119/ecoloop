@@ -63,6 +63,20 @@ class AiAgentService
             }
         }
 
+        if ($forceProvider === '9router' && $this->hasNineRouterKey()) {
+            try {
+                $routerResult = $this->evaluateViaNineRouter($product, $daysRemaining);
+                if ($routerResult !== null) {
+                    return $routerResult;
+                }
+            } catch (Throwable $e) {
+                Log::warning('9Router API evaluation failed during forced run, falling back.', [
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         // 1. If Mock Mode is explicitly forced, run the local deterministic engine
         if ($this->shouldUseMock()) {
             return $this->evaluateViaMock($product, $daysRemaining);
@@ -98,7 +112,22 @@ class AiAgentService
             }
         }
 
-        // 4. Graceful Fallback: Deterministic Mock Engine
+        // 4. Use the locally configured OpenAI-compatible 9Router gateway.
+        if ($this->hasNineRouterKey()) {
+            try {
+                $routerResult = $this->evaluateViaNineRouter($product, $daysRemaining);
+                if ($routerResult !== null) {
+                    return $routerResult;
+                }
+            } catch (Throwable $e) {
+                Log::warning('9Router API evaluation failed, falling back.', [
+                    'product_id' => $product->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // 5. Graceful Fallback: Deterministic Mock Engine
         return $this->evaluateViaMock($product, $daysRemaining, 'mock_fallback');
     }
 
@@ -260,6 +289,49 @@ class AiAgentService
     }
 
     /**
+     * Query the local OpenAI-compatible 9Router gateway.
+     */
+    protected function evaluateViaNineRouter(Product $product, int $daysRemaining): ?array
+    {
+        $apiKey = (string) config('services.ninerouter.api_key');
+        $model = (string) config('services.ninerouter.model', 'openrouter/google/gemma-4-31b-it:free');
+        $baseUrl = rtrim((string) config('services.ninerouter.base_url', 'http://127.0.0.1:20128/v1'), '/');
+        $prompt = $this->buildPrompt($product, $daysRemaining);
+
+        $response = Http::timeout(30)
+            ->withToken($apiKey)
+            ->acceptJson()
+            ->post($baseUrl.'/chat/completions', [
+                'model' => $model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are the EcoLoop food-waste prevention evaluator. Return only a JSON object with action, discount_percentage, recommended_partner_id, and reasoning.',
+                    ],
+                    ['role' => 'user', 'content' => $prompt],
+                ],
+                'response_format' => ['type' => 'json_object'],
+                'temperature' => 0.2,
+                'stream' => false,
+            ]);
+
+        if (! $response->successful()) {
+            Log::warning('9Router API returned error response', [
+                'status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        $rawText = $response->json('choices.0.message.content');
+        if (! is_string($rawText) || trim($rawText) === '') {
+            return null;
+        }
+
+        return $this->parseAndValidateJson($rawText, $daysRemaining, '9router');
+    }
+
+    /**
      * Build the structured prompt for LLMs.
      */
     protected function buildPrompt(Product $product, int $daysRemaining): string
@@ -324,7 +396,7 @@ PROMPT;
             }
 
             $discountPercentage = isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : 0.0;
-            if ($action === 'discount' && ($discountPercentage <= 0 || $discountPercentage >= 100)) {
+            if ($action === 'discount' && ($discountPercentage <= 0 || $discountPercentage > 50)) {
                 $discountPercentage = 30.0;
             } elseif ($action !== 'discount') {
                 $discountPercentage = 0.0;
@@ -335,6 +407,13 @@ PROMPT;
                 : null;
 
             if ($action === 'donate' && ! $partnerId) {
+                $partnerId = DonationPartner::query()->where('is_active', true)->value('id');
+            }
+
+            if ($action === 'donate' && $partnerId !== null && ! DonationPartner::query()
+                ->whereKey($partnerId)
+                ->where('is_active', true)
+                ->exists()) {
                 $partnerId = DonationPartner::query()->where('is_active', true)->value('id');
             }
 
@@ -368,7 +447,7 @@ PROMPT;
             return true;
         }
 
-        return ! $this->hasGeminiKey() && ! $this->hasGroqKey();
+        return ! $this->hasGeminiKey() && ! $this->hasGroqKey() && ! $this->hasNineRouterKey();
     }
 
     /**
@@ -385,5 +464,10 @@ PROMPT;
     public function hasGroqKey(): bool
     {
         return ! empty(config('services.groq.api_key'));
+    }
+
+    public function hasNineRouterKey(): bool
+    {
+        return ! empty(config('services.ninerouter.api_key'));
     }
 }

@@ -1,0 +1,75 @@
+{
+  "name": "EcoLoop Agent - Laravel Error Handler",
+  "nodes": [
+    {
+      "id": "eco-error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "eco-error-log",
+      "name": "Log Workflow Error to Laravel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://ecoloop.test/api/v1/agent-logs/error",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ execution_id: $json.execution?.id, action_type: \"workflow_error\", status: \"failed\", reasoning: \"Execution failed: \" + ($json.execution?.error?.message ?? \"Unknown workflow error\"), payload: $json.execution ?? $json }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Workflow Error to Laravel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Workflow Error to Laravel": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6eac30bf-26cd-4888-8aba-fd09602fb966",
+  "id": "ffd7a2d2-1a94-47c2-8357-00c713c26e1a",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

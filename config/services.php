@@ -45,6 +45,12 @@ return [
         'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
     ],
 
+    'ninerouter' => [
+        'api_key' => env('NINEROUTER_API_KEY'),
+        'base_url' => env('NINEROUTER_BASE_URL', 'http://127.0.0.1:20128/v1'),
+        'model' => env('NINEROUTER_MODEL', 'openrouter/google/gemma-4-31b-it:free'),
+    ],
+
     'n8n' => [
         'webhook_url' => env('N8N_WEBHOOK_URL'),
     ],

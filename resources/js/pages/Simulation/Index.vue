@@ -47,7 +47,6 @@ interface PartnerItem {
     contact_person?: string | null;
     email?: string | null;
     phone?: string | null;
-    impact_score?: number;
 }
 
 interface AgentLogItem {
