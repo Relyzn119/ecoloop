@@ -67,6 +67,18 @@ class Product extends Model
         return $this->hasMany(AgentLog::class);
     }
 
+    /** @return HasMany<ProductBatch, $this> */
+    public function batches(): HasMany
+    {
+        return $this->hasMany(ProductBatch::class);
+    }
+
+    /** @return HasMany<DiscountApproval, $this> */
+    public function discountApprovals(): HasMany
+    {
+        return $this->hasMany(DiscountApproval::class);
+    }
+
     /**
      * Scope a query to only include active or discounted products.
      *

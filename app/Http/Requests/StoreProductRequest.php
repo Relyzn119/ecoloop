@@ -33,6 +33,10 @@ class StoreProductRequest extends FormRequest
             'discount_price' => ['nullable', 'numeric', 'min:0', 'lte:original_price'],
             'expiration_date' => ['required', 'date'],
             'status' => ['required', 'string', 'in:active,discounted,reserved_donation,donated,disposed'],
+            'batches' => ['sometimes', 'array', 'min:1'],
+            'batches.*.batch_code' => ['nullable', 'string', 'max:100'],
+            'batches.*.quantity' => ['required_with:batches', 'integer', 'min:0'],
+            'batches.*.expiration_date' => ['required_with:batches', 'date'],
         ];
     }
 

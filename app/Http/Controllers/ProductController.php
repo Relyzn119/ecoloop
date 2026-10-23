@@ -11,6 +11,7 @@ use App\Services\InventoryService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -175,12 +176,46 @@ class ProductController extends Controller
     /**
      * Store a newly created product in storage.
      */
-    public function store(StoreProductRequest $request): RedirectResponse
+    public function store(StoreProductRequest $request, InventoryService $inventoryService): RedirectResponse
     {
-        Product::create($request->validated());
+        $validated = $request->validated();
+        $batches = $validated['batches'] ?? [[
+            'quantity' => $validated['quantity'],
+            'expiration_date' => $validated['expiration_date'],
+        ]];
+        unset($validated['batches']);
+
+        $validated['quantity'] = collect($batches)->sum('quantity');
+        $validated['expiration_date'] = collect($batches)->min('expiration_date');
+        $validated['status'] = 'active';
+        $validated['discount_price'] = null;
+
+        $product = DB::transaction(function () use ($validated, $batches): Product {
+            $product = Product::query()->create($validated);
+
+            foreach ($batches as $index => $batch) {
+                $quantity = (int) $batch['quantity'];
+                $product->batches()->create([
+                    'batch_code' => ($batch['batch_code'] ?? null) ?: $product->sku.'-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT),
+                    'quantity_received' => $quantity,
+                    'quantity_available' => $quantity,
+                    'expiration_date' => $batch['expiration_date'],
+                    'original_price' => $product->original_price,
+                    'status' => 'active',
+                    'source' => 'manual',
+                ]);
+            }
+
+            return $product;
+        });
+
+        $evaluation = $inventoryService->evaluateProductBatches($product->load('category'));
+        $donated = collect($evaluation['results'])->contains('action', 'donated');
 
         return redirect()->route('inventory.index')
-            ->with('success', 'Product added to inventory successfully.');
+            ->with('success', $donated
+                ? 'Product saved and qualifying stock batches were donated automatically.'
+                : 'Product saved. Eligible discount batches are awaiting manager or cashier approval.');
     }
 
     /**
@@ -188,6 +223,11 @@ class ProductController extends Controller
      */
     public function edit(Product $product): Response
     {
+        $product->loadCount('batches')
+            ->loadSum('batches', 'quantity_donated')
+            ->loadSum('batches', 'quantity_sold');
+        $stockLocked = $product->batches_count > 1
+            || ((int) $product->batches_quantity_donated + (int) $product->batches_quantity_sold) > 0;
         $categories = Category::query()->select('id', 'name', 'slug')->orderBy('name')->get();
 
         return Inertia::render('Inventory/Form', [
@@ -203,6 +243,8 @@ class ProductController extends Controller
                 'discount_price' => $product->discount_price !== null ? (float) $product->discount_price : null,
                 'expiration_date' => $product->expiration_date->toDateString(),
                 'status' => $product->status,
+                'batch_count' => $product->batches_count,
+                'stock_locked' => $stockLocked,
             ],
             'categories' => $categories,
         ]);
@@ -213,7 +255,32 @@ class ProductController extends Controller
      */
     public function update(UpdateProductRequest $request, Product $product): RedirectResponse
     {
-        $product->update($request->validated());
+        $validated = $request->validated();
+        $batches = $product->batches()->get();
+
+        $stockHasMovement = $batches->sum('quantity_donated') > 0 || $batches->sum('quantity_sold') > 0;
+
+        if ($batches->count() > 1 || $stockHasMovement) {
+            unset($validated['quantity'], $validated['expiration_date'], $validated['status'], $validated['discount_price']);
+            $product->update($validated);
+            if (isset($validated['original_price'])) {
+                $product->batches()->where('quantity_available', '>', 0)->update([
+                    'original_price' => $validated['original_price'],
+                ]);
+            }
+        } else {
+            $product->update($validated);
+            if ($batches->count() === 1) {
+                $batches->first()->update([
+                    'quantity_received' => $validated['quantity'],
+                    'quantity_available' => $validated['quantity'],
+                    'expiration_date' => $validated['expiration_date'],
+                    'original_price' => $validated['original_price'],
+                    'discount_price' => $validated['discount_price'],
+                    'status' => $validated['status'],
+                ]);
+            }
+        }
 
         return redirect()->route('inventory.index')
             ->with('success', 'Product updated successfully.');

@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\AgentLog;
+use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
 use App\Models\Product;
+use App\Models\ProductBatch;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -63,6 +65,11 @@ class InventoryService
             $discountPrice = round($originalPrice * (1 - ($discountPercentage / 100)), 2);
 
             $product->update([
+                'status' => 'discounted',
+                'discount_price' => $discountPrice,
+            ]);
+            $this->ensureLegacyBatch($product);
+            $product->batches()->where('quantity_available', '>', 0)->update([
                 'status' => 'discounted',
                 'discount_price' => $discountPrice,
             ]);
@@ -141,74 +148,32 @@ class InventoryService
     public function simulateAiEvaluation(int $daysThreshold = 3): array
     {
         $expiring = $this->getExpiringProducts($daysThreshold);
-        $aiAgentService = app(AiAgentService::class);
-
         $actionsTaken = [];
         $skipped = [];
 
         foreach ($expiring as $product) {
-            $decision = $aiAgentService->evaluateProduct($product, '9router');
-            $reason = (string) ($decision['reasoning'] ?? 'Evaluated by EcoLoop AI.');
+            $result = $this->evaluateProductBatches($product, $daysThreshold);
 
-            // A deterministic fallback is useful for a single-product preview,
-            // but do not let it make unattended inventory changes in a batch run.
-            if (($decision['provider'] ?? null) !== '9router') {
-                $skipped[] = [
-                    'product_id' => $product->id,
-                    'sku' => $product->sku,
-                    'name' => $product->name,
-                    'reason' => '9Router did not return a live model decision; no inventory change was applied.',
-                ];
+            foreach ($result['results'] as $batchResult) {
+                if ($batchResult['action'] === 'skipped') {
+                    $skipped[] = [
+                        'product_id' => $product->id,
+                        'batch_id' => $batchResult['batch_id'],
+                        'reason' => $batchResult['reason'],
+                    ];
 
-                continue;
-            }
-
-            if ($decision['action'] === 'discount' && $product->status === 'active') {
-                $discountPercentage = (float) ($decision['discount_percentage'] ?? 0);
-                if ($discountPercentage <= 0 || $discountPercentage > 50) {
                     continue;
                 }
 
-                $updated = $this->applyDiscount($product->id, $discountPercentage, $reason);
-
-                $actionsTaken[] = [
-                    'action' => 'apply_discount',
-                    'product_id' => $updated->id,
-                    'sku' => $updated->sku,
-                    'name' => $updated->name,
-                    'discount_percentage' => $discountPercentage,
-                    'discount_price' => $updated->discount_price,
-                    'provider' => $decision['provider'] ?? 'unknown',
-                    'reason' => $reason,
-                ];
-            } elseif ($decision['action'] === 'donate' && $product->status !== 'reserved_donation') {
-                $partnerId = $decision['recommended_partner_id']
-                    ?? DonationPartner::query()->where('is_active', true)->value('id');
-
-                if (! $partnerId) {
-                    continue;
+                if (in_array($batchResult['action'], ['donated', 'awaiting_discount_approval'], true)) {
+                    $actionsTaken[] = [
+                        'action' => $batchResult['action'],
+                        'product_id' => $product->id,
+                        'sku' => $product->sku,
+                        'name' => $product->name,
+                        ...$batchResult,
+                    ];
                 }
-
-                $partner = DonationPartner::query()
-                    ->whereKey($partnerId)
-                    ->where('is_active', true)
-                    ->first();
-
-                if (! $partner) {
-                    continue;
-                }
-
-                $updated = $this->reserveForDonation($product->id, $partner->id, $reason);
-
-                $actionsTaken[] = [
-                    'action' => 'reserve_donation',
-                    'product_id' => $updated->id,
-                    'sku' => $updated->sku,
-                    'name' => $updated->name,
-                    'partner' => $partner->name,
-                    'provider' => $decision['provider'] ?? 'unknown',
-                    'reason' => $reason,
-                ];
             }
         }
 
@@ -220,5 +185,179 @@ class InventoryService
             'skipped' => $skipped,
             'simulated_at' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * Evaluate all eligible batches for one product after inventory intake.
+     * Donation and approval records are scoped to the expiring batch only.
+     *
+     * @return array<string, mixed>
+     */
+    public function evaluateProductBatches(Product $product, int $daysThreshold = 7): array
+    {
+        $this->ensureLegacyBatch($product);
+        $aiAgentService = app(AiAgentService::class);
+        $processed = [];
+
+        $batches = $product->batches()
+            ->where('quantity_available', '>', 0)
+            ->whereIn('status', ['active', 'discounted'])
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->whereDate('expiration_date', '<=', now()->addDays($daysThreshold)->toDateString())
+            ->orderBy('expiration_date')
+            ->get();
+
+        foreach ($batches as $batch) {
+            $evaluationProduct = $product->replicate();
+            $evaluationProduct->id = $product->id;
+            $evaluationProduct->setRelation('category', $product->category);
+            $evaluationProduct->quantity = $batch->quantity_available;
+            $evaluationProduct->expiration_date = $batch->expiration_date;
+            $evaluationProduct->original_price = $batch->original_price;
+            $evaluationProduct->discount_price = $batch->discount_price;
+
+            $decision = $aiAgentService->evaluateProduct($evaluationProduct, '9router');
+            if (($decision['provider'] ?? null) !== '9router') {
+                $processed[] = [
+                    'batch_id' => $batch->id,
+                    'action' => 'skipped',
+                    'reason' => '9Router did not return a live model decision; no inventory change was applied.',
+                ];
+
+                continue;
+            }
+
+            $daysRemaining = now()->startOfDay()->diffInDays($batch->expiration_date->startOfDay(), false);
+            $reason = (string) ($decision['reasoning'] ?? 'AI evaluated the inventory batch.');
+
+            if ($daysRemaining <= 2) {
+                $partnerId = $decision['recommended_partner_id']
+                    ?? DonationPartner::query()->where('is_active', true)->value('id');
+                $partner = $partnerId
+                    ? DonationPartner::query()->whereKey($partnerId)->where('is_active', true)->first()
+                    : null;
+
+                if (! $partner) {
+                    $processed[] = [
+                        'batch_id' => $batch->id,
+                        'action' => 'skipped',
+                        'reason' => 'No active donation partner is available.',
+                    ];
+
+                    continue;
+                }
+
+                $donatedQuantity = DB::transaction(function () use ($product, $batch, $partner, $reason): int {
+                    $lockedBatch = ProductBatch::query()->lockForUpdate()->findOrFail($batch->id);
+                    if ($lockedBatch->quantity_available < 1 || $lockedBatch->status === 'donated') {
+                        return 0;
+                    }
+
+                    $quantity = $lockedBatch->quantity_available;
+                    $lockedBatch->update([
+                        'quantity_available' => 0,
+                        'quantity_donated' => $lockedBatch->quantity_donated + $quantity,
+                        'status' => 'donated',
+                    ]);
+
+                    AgentLog::create([
+                        'product_id' => $product->id,
+                        'partner_id' => $partner->id,
+                        'action_type' => 'donation_requested',
+                        'reasoning' => $reason,
+                        'payload' => [
+                            'event_type' => 'donation_completed',
+                            'batch_id' => $lockedBatch->id,
+                            'batch_code' => $lockedBatch->batch_code,
+                            'quantity_donated' => $quantity,
+                            'unit' => $product->unit,
+                            'partner_id' => $partner->id,
+                            'provider' => '9router',
+                        ],
+                        'status' => 'success',
+                    ]);
+
+                    $this->refreshProductStockSummary($product->id);
+
+                    return $quantity;
+                });
+
+                $processed[] = ['batch_id' => $batch->id, 'action' => 'donated', 'quantity' => $donatedQuantity];
+
+                continue;
+            }
+
+            if ($daysRemaining >= 3 && $daysRemaining <= 7 && $decision['action'] === 'discount') {
+                $percentage = max(1, min(50, (int) round((float) $decision['discount_percentage'])));
+                $price = round((float) $batch->original_price * (1 - ($percentage / 100)), 2);
+
+                $approval = DiscountApproval::query()->firstOrCreate(
+                    [
+                        'product_batch_id' => $batch->id,
+                        'status' => 'pending',
+                    ],
+                    [
+                        'product_id' => $product->id,
+                        'recommended_percentage' => $percentage,
+                        'recommended_price' => $price,
+                        'reasoning' => $reason,
+                    ]
+                );
+
+                $processed[] = [
+                    'batch_id' => $batch->id,
+                    'action' => 'awaiting_discount_approval',
+                    'approval_id' => $approval->id,
+                    'recommended_percentage' => $percentage,
+                    'recommended_price' => $price,
+                ];
+
+                continue;
+            }
+
+            $processed[] = ['batch_id' => $batch->id, 'action' => 'none'];
+        }
+
+        return [
+            'product_id' => $product->id,
+            'batch_count' => $batches->count(),
+            'results' => $processed,
+            'product' => $product->fresh(),
+        ];
+    }
+
+    private function ensureLegacyBatch(Product $product): void
+    {
+        if ($product->batches()->exists()) {
+            return;
+        }
+
+        ProductBatch::query()->create([
+            'product_id' => $product->id,
+            'batch_code' => 'LEGACY-'.$product->id,
+            'quantity_received' => max(0, (int) $product->quantity),
+            'quantity_available' => max(0, (int) $product->quantity),
+            'expiration_date' => $product->expiration_date,
+            'original_price' => $product->original_price,
+            'discount_price' => $product->discount_price,
+            'status' => $product->status,
+            'source' => 'legacy',
+            'source_reference' => (string) $product->id,
+        ]);
+    }
+
+    private function refreshProductStockSummary(int $productId): void
+    {
+        $product = Product::query()->lockForUpdate()->findOrFail($productId);
+        $availableBatches = $product->batches()->where('quantity_available', '>', 0)->get();
+        $quantity = (int) $availableBatches->sum('quantity_available');
+        $earliestExpiration = $availableBatches->min('expiration_date');
+        $hasFullPriceStock = $availableBatches->contains(fn (ProductBatch $batch): bool => $batch->status !== 'discounted');
+
+        $product->update([
+            'quantity' => $quantity,
+            'expiration_date' => $earliestExpiration ?? $product->expiration_date,
+            'status' => $quantity === 0 ? 'donated' : ($hasFullPriceStock ? 'active' : 'discounted'),
+        ]);
     }
 }

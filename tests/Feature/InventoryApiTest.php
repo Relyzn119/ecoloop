@@ -6,6 +6,7 @@ use App\Models\DonationPartner;
 use App\Models\Product;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
 
@@ -138,6 +139,15 @@ test('ai status endpoint returns mock configuration and features', function () {
 });
 
 test('ai simulate run triggers autonomous decisions locally without n8n', function () {
+    config([
+        'services.ninerouter.api_key' => 'test-key',
+        'services.ninerouter.base_url' => 'http://127.0.0.1:20128/v1',
+    ]);
+    Http::fake([
+        '*/chat/completions' => Http::sequence()
+            ->push(['choices' => [['message' => ['content' => '{"action":"donate","discount_percentage":0,"recommended_partner_id":1,"reasoning":"Urgent."}']]]])
+            ->push(['choices' => [['message' => ['content' => '{"action":"discount","discount_percentage":30,"recommended_partner_id":null,"reasoning":"Clearance."}']]]]),
+    ]);
     $category = Category::factory()->create();
     $partner = DonationPartner::factory()->create(['is_active' => true]);
 
@@ -163,8 +173,12 @@ test('ai simulate run triggers autonomous decisions locally without n8n', functi
         ->assertJsonPath('success', true)
         ->assertJsonPath('data.actions_count', 2);
 
-    expect($p1->fresh()->status)->toBe('reserved_donation')
-        ->and($p2->fresh()->status)->toBe('discounted');
+    expect($p1->fresh()->status)->toBe('donated')
+        ->and($p1->fresh()->quantity)->toBe(0)
+        ->and($p2->fresh()->status)->toBe('active')
+        ->and($p2->fresh()->discount_price)->toBeNull()
+        ->and($p2->discountApprovals()->where('status', 'pending')->exists())->toBeTrue()
+        ->and($p1->batches()->first()->quantity_donated)->toBe($p1->batches()->first()->quantity_received);
 });
 
 test('n8n webhook endpoint accepts external automation commands', function () {

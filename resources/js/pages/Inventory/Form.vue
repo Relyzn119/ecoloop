@@ -22,6 +22,8 @@ interface ProductFormData {
     original_price: number | '';
     discount_price: number | '' | null;
     expiration_date: string;
+    batch_count?: number;
+    stock_locked?: boolean;
     status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed';
 }
 
@@ -61,6 +63,7 @@ const form = useForm({
     discount_price: props.product?.discount_price ?? null,
     expiration_date: props.product?.expiration_date ?? getFutureDate(3),
     status: props.product?.status ?? 'active',
+    additionalBatches: [] as Array<{ quantity: number; expiration_date: string }>,
 });
 
 // Quick Expiration Date Presets
@@ -98,6 +101,14 @@ const validateClientSide = (): boolean => {
     if (!form.expiration_date) {
         clientErrors.value.expiration_date = 'Expiration date is required.';
     }
+    form.additionalBatches.forEach((batch, index) => {
+        if (batch.quantity < 0) {
+            clientErrors.value[`batch_${index}_quantity`] = 'Quantity must be 0 or greater.';
+        }
+        if (!batch.expiration_date) {
+            clientErrors.value[`batch_${index}_expiration_date`] = 'Expiration date is required.';
+        }
+    });
 
     return Object.keys(clientErrors.value).length === 0;
 };
@@ -112,7 +123,13 @@ const submitForm = () => {
             preserveScroll: true,
         });
     } else {
-        form.post('/inventory', {
+        form.transform((data) => ({
+            ...data,
+            batches: [
+                { quantity: data.quantity, expiration_date: data.expiration_date },
+                ...data.additionalBatches,
+            ],
+        })).post('/inventory', {
             preserveScroll: true,
         });
     }
@@ -255,6 +272,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                         </label>
                         <select
                             v-model="form.status"
+                            :disabled="isEditing && props.product?.stock_locked"
                             class="mt-1.5 w-full rounded-lg border border-neutral-200 bg-neutral-50/50 px-3.5 py-2.5 text-sm text-neutral-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100 dark:focus:border-emerald-500 dark:focus:bg-neutral-800"
                         >
                             <option value="active">Active (Full Price)</option>
@@ -265,6 +283,9 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                         </select>
                         <p v-if="form.errors.status" class="mt-1 text-xs text-red-500">
                             {{ form.errors.status }}
+                        </p>
+                        <p v-if="isEditing && props.product?.stock_locked" class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            Status and remaining stock are managed by the product batches.
                         </p>
                     </div>
 
@@ -298,6 +319,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                             v-model.number="form.quantity"
                             type="number"
                             min="0"
+                            :disabled="isEditing && props.product?.stock_locked"
                             placeholder="e.g. 20"
                             class="mt-1.5 w-full rounded-lg border border-neutral-200 bg-neutral-50/50 px-3.5 py-2.5 text-sm text-neutral-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100 dark:focus:border-emerald-500 dark:focus:bg-neutral-800"
                             :class="{ 'border-red-500': form.errors.quantity || clientErrors.quantity }"
@@ -351,6 +373,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                                 <input
                                     v-model="form.expiration_date"
                                     type="date"
+                                    :disabled="isEditing && props.product?.stock_locked"
                                     class="w-full rounded-lg border border-neutral-200 bg-neutral-50/50 py-2.5 pl-10 pr-3.5 text-sm text-neutral-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100 dark:focus:border-emerald-500 dark:focus:bg-neutral-800"
                                     :class="{ 'border-red-500': form.errors.expiration_date || clientErrors.expiration_date }"
                                 />
@@ -389,6 +412,35 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                             <AlertCircle class="size-3.5" />
                             <span>{{ form.errors.expiration_date || clientErrors.expiration_date }}</span>
                         </p>
+                    </div>
+
+                    <div v-if="!isEditing" class="col-span-1 rounded-lg border border-dashed border-neutral-300 p-4 dark:border-neutral-700 md:col-span-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Additional supermarket batches</h3>
+                                <p class="text-xs text-neutral-500 dark:text-neutral-400">Use one row per receiving lot when the same SKU has different expiration dates.</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                                @click="form.additionalBatches.push({ quantity: 1, expiration_date: getFutureDate(5) })"
+                            >
+                                Add batch
+                            </button>
+                        </div>
+                        <div v-for="(batch, index) in form.additionalBatches" :key="index" class="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
+                            <label class="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                                Batch quantity
+                                <input v-model.number="batch.quantity" type="number" min="0" class="mt-1 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                                <span v-if="clientErrors[`batch_${index}_quantity`]" class="mt-1 block text-red-500">{{ clientErrors[`batch_${index}_quantity`] }}</span>
+                            </label>
+                            <label class="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                                Expiration date
+                                <input v-model="batch.expiration_date" type="date" class="mt-1 w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100" />
+                                <span v-if="clientErrors[`batch_${index}_expiration_date`]" class="mt-1 block text-red-500">{{ clientErrors[`batch_${index}_expiration_date`] }}</span>
+                            </label>
+                            <button type="button" class="rounded-md px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950" @click="form.additionalBatches.splice(index, 1)">Remove</button>
+                        </div>
                     </div>
 
                     <!-- Original Price -->
