@@ -61,17 +61,18 @@ class InventoryApiController extends Controller
      */
     public function applyDiscount(ApplyDiscountRequest $request): JsonResponse
     {
-        $product = $this->inventoryService->applyDiscount(
+        $percentage = min(50, (int) round((float) $request->input('discount_percentage')));
+        $approvals = $this->inventoryService->requestDiscountApproval(
             productId: $request->integer('product_id'),
-            discountPercentage: (float) $request->input('discount_percentage'),
+            discountPercentage: $percentage,
             reason: $request->string('reason')->toString()
         );
 
         return response()->json([
             'success' => true,
-            'message' => 'Dynamic markdown discount applied successfully.',
-            'data' => new ProductResource($product),
-        ], Response::HTTP_OK);
+            'message' => 'Discount recommendation sent for manager or cashier approval; no price was changed.',
+            'data' => ['approval_ids' => collect($approvals)->pluck('id')],
+        ], Response::HTTP_ACCEPTED);
     }
 
     /**
@@ -170,7 +171,7 @@ class InventoryApiController extends Controller
         $validated = $request->validate([
             'action' => ['required', 'string', 'in:apply_discount,reserve_donation,health_ping'],
             'product_id' => ['required_unless:action,health_ping', 'integer', 'exists:products,id'],
-            'discount_percentage' => ['required_if:action,apply_discount', 'numeric', 'min:1', 'max:99'],
+            'discount_percentage' => ['required_if:action,apply_discount', 'integer', 'min:1', 'max:50'],
             'partner_id' => ['required_if:action,reserve_donation', 'integer', 'exists:donation_partners,id'],
             'reason' => ['required_unless:action,health_ping', 'string', 'min:3'],
         ]);
@@ -183,17 +184,17 @@ class InventoryApiController extends Controller
         }
 
         if ($validated['action'] === 'apply_discount') {
-            $product = $this->inventoryService->applyDiscount(
+            $approvals = $this->inventoryService->requestDiscountApproval(
                 productId: (int) $validated['product_id'],
-                discountPercentage: (float) $validated['discount_percentage'],
+                discountPercentage: (int) $validated['discount_percentage'],
                 reason: (string) $validated['reason']
             );
 
             return response()->json([
                 'success' => true,
-                'message' => 'Discount applied via n8n webhook.',
-                'data' => new ProductResource($product),
-            ], Response::HTTP_OK);
+                'message' => 'Discount recommendation sent for approval; no price was changed.',
+                'data' => ['approval_ids' => collect($approvals)->pluck('id')],
+            ], Response::HTTP_ACCEPTED);
         }
 
         if ($validated['action'] === 'reserve_donation') {

@@ -165,7 +165,7 @@ test('admin can execute manual override to revert automated discount', function 
         ->and($overrideLog->payload['override_action'])->toBe('revert');
 });
 
-test('admin can execute manual override to modify discount percentage', function () {
+test('agent log override cannot directly modify a discount price', function () {
     $product = Product::factory()->create([
         'status' => 'discounted',
         'original_price' => 10.00,
@@ -184,12 +184,11 @@ test('admin can execute manual override to modify discount percentage', function
         'reason' => 'Manager approved 30% instead of 50% markdown.',
     ]);
 
-    $response->assertRedirect()
-        ->assertSessionHas('success');
+    $response->assertSessionHasErrors('override_action');
 
-    // Product should have 30% discount applied ($7.00)
+    // Price changes must come through the pending Telegram approval flow.
     expect($product->fresh()->status)->toBe('discounted')
-        ->and((float) $product->fresh()->discount_price)->toBe(7.00);
+        ->and((float) $product->fresh()->discount_price)->toBe(5.00);
 });
 
 test('admin can trigger simulated ai evaluation scan', function () {

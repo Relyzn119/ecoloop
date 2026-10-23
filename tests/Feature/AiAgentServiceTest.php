@@ -154,6 +154,7 @@ test('ai agent service falls back to mock engine when all cloud apis fail', func
     Config::set('app.enable_mock_ai', false);
     Config::set('services.gemini.api_key', 'test-gemini-key');
     Config::set('services.groq.api_key', 'test-groq-key');
+    Config::set('services.ninerouter.api_key', '');
 
     $category = Category::factory()->create(['name' => 'Bakery']);
     $product = Product::factory()->create([

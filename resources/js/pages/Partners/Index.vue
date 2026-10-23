@@ -29,6 +29,7 @@ interface PartnerItem {
     contact_person: string;
     phone: string;
     email: string;
+    telegram_chat_id: string | null;
     address: string;
     is_active: boolean;
     created_at?: string;
@@ -123,6 +124,7 @@ const form = useForm({
     contact_person: '',
     phone: '',
     email: '',
+    telegram_chat_id: '',
     address: '',
     is_active: true,
 });
@@ -144,6 +146,7 @@ const openEditModal = (partner: PartnerItem) => {
     form.contact_person = partner.contact_person;
     form.phone = partner.phone;
     form.email = partner.email;
+    form.telegram_chat_id = partner.telegram_chat_id ?? '';
     form.address = partner.address;
     form.is_active = partner.is_active;
     isFormModalOpen.value = true;
@@ -606,6 +609,7 @@ const toggleStatus = (partner: PartnerItem) => {
                                 {{ editingPartner ? 'Edit Donation Partner' : 'Register New Donation Partner' }}
                             </h3>
                         </div>
+
                         <button
                             type="button"
                             class="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
@@ -690,6 +694,18 @@ const toggleStatus = (partner: PartnerItem) => {
                                 <AlertCircle class="size-3.5" />
                                 <span>{{ form.errors.email || clientErrors.email }}</span>
                             </p>
+                        </div>
+
+                        <!-- Telegram Chat ID -->
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-neutral-700 dark:text-neutral-300">Telegram Chat ID (optional)</label>
+                            <input
+                                v-model="form.telegram_chat_id"
+                                type="text"
+                                placeholder="For Telegram donation alerts to this partner"
+                                class="mt-1.5 w-full rounded-lg border border-neutral-200 bg-neutral-50/50 px-3.5 py-2.5 text-sm text-neutral-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100"
+                            />
+                            <p class="mt-1 text-xs text-muted-foreground">Add this after the partner starts your bot and shares its chat ID.</p>
                         </div>
 
                         <!-- Delivery / Pickup Address -->

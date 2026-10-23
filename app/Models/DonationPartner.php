@@ -22,6 +22,7 @@ class DonationPartner extends Model
         'contact_person',
         'phone',
         'email',
+        'telegram_chat_id',
         'address',
         'is_active',
     ];

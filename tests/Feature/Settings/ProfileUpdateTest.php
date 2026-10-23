@@ -20,6 +20,8 @@ test('profile information can be updated', function () {
         ->patch('/settings/profile', [
             'name' => 'Test User',
             'email' => 'test@example.com',
+            'phone' => '+628112223333',
+            'telegram_chat_id' => '123456789',
         ]);
 
     $response
@@ -30,6 +32,8 @@ test('profile information can be updated', function () {
 
     expect($user->name)->toBe('Test User');
     expect($user->email)->toBe('test@example.com');
+    expect($user->phone)->toBe('+628112223333');
+    expect($user->telegram_chat_id)->toBe('123456789');
     expect($user->email_verified_at)->toBeNull();
 });
 
@@ -41,6 +45,8 @@ test('email verification status is unchanged when the email address is unchanged
         ->patch('/settings/profile', [
             'name' => 'Test User',
             'email' => $user->email,
+            'phone' => '+628112223333',
+            'telegram_chat_id' => null,
         ]);
 
     $response

@@ -49,6 +49,7 @@ class DonationPartnerController extends Controller
                 'contact_person' => $partner->contact_person,
                 'phone' => $partner->phone,
                 'email' => $partner->email,
+                'telegram_chat_id' => $partner->telegram_chat_id,
                 'address' => $partner->address,
                 'is_active' => (bool) $partner->is_active,
                 'created_at' => $partner->created_at?->format('M d, Y'),

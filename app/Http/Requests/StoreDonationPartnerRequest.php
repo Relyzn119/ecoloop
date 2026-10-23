@@ -27,6 +27,7 @@ class StoreDonationPartnerRequest extends FormRequest
             'contact_person' => ['required', 'string', 'max:150'],
             'phone' => ['required', 'string', 'max:50'],
             'email' => ['required', 'email', 'max:150'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:64', 'regex:/^-?\d+$/', 'unique:donation_partners,telegram_chat_id'],
             'address' => ['required', 'string', 'max:1000'],
             'is_active' => ['sometimes', 'boolean'],
         ];

@@ -304,15 +304,15 @@ class ProductController extends Controller
     public function applyDiscount(Request $request, Product $product, InventoryService $inventoryService): RedirectResponse
     {
         $validated = $request->validate([
-            'discount_percentage' => ['required', 'numeric', 'min:1', 'max:99'],
+            'discount_percentage' => ['required', 'integer', 'min:1', 'max:50'],
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
         $reason = $validated['reason'] ?? 'Manual clearance discount applied by inventory manager.';
-        $inventoryService->applyDiscount($product->id, (float) $validated['discount_percentage'], $reason);
+        $approvals = $inventoryService->requestDiscountApproval($product->id, (int) $validated['discount_percentage'], $reason);
 
         return redirect()->back()
-            ->with('success', "Applied {$validated['discount_percentage']}% discount to '{$product->name}'.");
+            ->with('success', "Sent {$validated['discount_percentage']}% discount recommendation for '{$product->name}' to Telegram for approval (".count($approvals).' batch(es)).');
     }
 
     /**

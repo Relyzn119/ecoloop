@@ -92,6 +92,36 @@ class InventoryService
         });
     }
 
+    /** Create pending approvals without changing any batch or product price. */
+    public function requestDiscountApproval(int $productId, int $discountPercentage, string $reason): array
+    {
+        if ($discountPercentage < 1 || $discountPercentage > 50) {
+            throw new InvalidArgumentException('Discount recommendations must be between 1% and 50%.');
+        }
+
+        $product = Product::query()->findOrFail($productId);
+        $this->ensureLegacyBatch($product);
+        $approvals = [];
+
+        foreach ($product->batches()->where('quantity_available', '>', 0)->get() as $batch) {
+            $approval = DiscountApproval::query()->firstOrCreate(
+                ['product_batch_id' => $batch->id, 'status' => 'pending'],
+                [
+                    'product_id' => $product->id,
+                    'recommended_percentage' => $discountPercentage,
+                    'recommended_price' => round((float) $batch->original_price * (1 - ($discountPercentage / 100)), 2),
+                    'reasoning' => $reason,
+                ]
+            );
+            if ($approval->wasRecentlyCreated) {
+                $this->notificationService->queueDiscountApproval($approval);
+            }
+            $approvals[] = $approval;
+        }
+
+        return $approvals;
+    }
+
     /**
      * Reserve a product for donation to a partner and log the audit entry.
      *
@@ -130,9 +160,6 @@ class InventoryService
                 ],
                 'status' => 'success',
             ]);
-
-            // Dispatch external notification alert (WhatsApp/Email/n8n webhook)
-            $this->notificationService->sendDonationAlert($partner, $product, $reason);
 
             return $product->fresh(['category', 'agentLogs']);
         });
@@ -247,10 +274,10 @@ class InventoryService
                     continue;
                 }
 
-                $donatedQuantity = DB::transaction(function () use ($product, $batch, $partner, $reason): int {
+                $donation = DB::transaction(function () use ($product, $batch, $partner, $reason): array {
                     $lockedBatch = ProductBatch::query()->lockForUpdate()->findOrFail($batch->id);
                     if ($lockedBatch->quantity_available < 1 || $lockedBatch->status === 'donated') {
-                        return 0;
+                        return ['quantity' => 0, 'batch' => $lockedBatch];
                     }
 
                     $quantity = $lockedBatch->quantity_available;
@@ -279,8 +306,13 @@ class InventoryService
 
                     $this->refreshProductStockSummary($product->id);
 
-                    return $quantity;
+                    return ['quantity' => $quantity, 'batch' => $lockedBatch->fresh()];
                 });
+
+                $donatedQuantity = $donation['quantity'];
+                if ($donatedQuantity > 0) {
+                    $this->notificationService->queueDonationAlerts($partner, $product->fresh(), $donation['batch'], $reason);
+                }
 
                 $processed[] = ['batch_id' => $batch->id, 'action' => 'donated', 'quantity' => $donatedQuantity];
 
@@ -303,6 +335,9 @@ class InventoryService
                         'reasoning' => $reason,
                     ]
                 );
+                if ($approval->wasRecentlyCreated) {
+                    $this->notificationService->queueDiscountApproval($approval);
+                }
 
                 $processed[] = [
                     'batch_id' => $batch->id,

@@ -24,7 +24,7 @@ class ApplyDiscountRequest extends FormRequest
     {
         return [
             'product_id' => ['required', 'integer', 'exists:products,id'],
-            'discount_percentage' => ['required', 'numeric', 'min:1', 'max:99'],
+            'discount_percentage' => ['required', 'integer', 'min:1', 'max:50'],
             'reason' => ['required', 'string', 'min:3', 'max:1000'],
         ];
     }

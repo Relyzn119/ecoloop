@@ -2,15 +2,119 @@
 
 namespace App\Services;
 
+use App\Jobs\SendDiscountApprovalNotifications;
+use App\Jobs\SendDonationNotifications;
 use App\Models\AgentLog;
+use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
+use App\Models\NotificationDelivery;
 use App\Models\Product;
+use App\Models\ProductBatch;
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class NotificationService
 {
+    /** Queue donation alerts for the partner and all manager/cashier accounts. */
+    public function queueDonationAlerts(DonationPartner $partner, Product $product, ProductBatch $batch, string $reason): void
+    {
+        $details = sprintf(
+            'Donation completed: %s (%s), batch %s, %d %s, expiry %s. Reason: %s',
+            $product->name,
+            $product->sku,
+            $batch->batch_code,
+            $batch->quantity_donated,
+            $product->unit,
+            $batch->expiration_date->toDateString(),
+            $reason
+        );
+
+        $this->queueDelivery('donation_completed', 'email', $partner->email, 'EcoLoop food donation completed', [
+            'body' => "Hello {$partner->contact_person},\n\n{$details}\n\nEcoLoop Agent",
+            'product_id' => $product->id,
+        ], "donation:{$batch->id}:partner:email");
+
+        if ($partner->telegram_chat_id) {
+            $this->queueDelivery('donation_completed', 'telegram', $partner->telegram_chat_id, null, [
+                'text' => $details,
+                'product_id' => $product->id,
+            ], "donation:{$batch->id}:partner:telegram");
+        }
+
+        $users = User::query()->notificationRecipients()->get(['id', 'name', 'email', 'telegram_chat_id']);
+        foreach ($users as $user) {
+            $this->queueDelivery('donation_completed', 'email', $user->email, 'EcoLoop donation completed', [
+                'body' => "Hello {$user->name},\n\n{$details}",
+                'product_id' => $product->id,
+            ], "donation:{$batch->id}:user:{$user->id}:email");
+
+            if ($user->telegram_chat_id) {
+                $this->queueDelivery('donation_completed', 'telegram', $user->telegram_chat_id, null, [
+                    'text' => $details,
+                    'product_id' => $product->id,
+                ], "donation:{$batch->id}:user:{$user->id}:telegram");
+            }
+        }
+    }
+
+    /** Queue an approval request with Telegram buttons and a custom discount command. */
+    public function queueDiscountApproval(DiscountApproval $approval): void
+    {
+        $approval->loadMissing(['product', 'batch']);
+        $product = $approval->product;
+        $batch = $approval->batch;
+        $text = sprintf(
+            "Discount approval required\n%s (%s), batch %s\nStock: %d %s\nExpires: %s\nAI recommendation: %d%% (price %s)\nReason: %s\n\nChoose an action. For a custom rate, reply: /discount %d 25",
+            $product->name,
+            $product->sku,
+            $batch->batch_code,
+            $batch->quantity_available,
+            $product->unit,
+            $batch->expiration_date->toDateString(),
+            $approval->recommended_percentage,
+            number_format((float) $approval->recommended_price, 2),
+            $approval->reasoning,
+            $approval->id
+        );
+        $keyboard = ['inline_keyboard' => [[
+            ['text' => 'Approve AI '.$approval->recommended_percentage.'%', 'callback_data' => 'approve:'.$approval->id],
+            ['text' => 'Reject', 'callback_data' => 'reject:'.$approval->id],
+        ]]];
+
+        foreach (User::query()->notificationRecipients()->whereNotNull('telegram_chat_id')->get(['id', 'telegram_chat_id']) as $user) {
+            $this->queueDelivery('discount_approval', 'telegram', $user->telegram_chat_id, null, [
+                'text' => $text,
+                'reply_markup' => $keyboard,
+                'product_id' => $product->id,
+            ], "approval:{$approval->id}:user:{$user->id}:telegram", true);
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function queueDelivery(string $event, string $channel, string $recipient, ?string $subject, array $payload, string $key, bool $approval = false): void
+    {
+        $delivery = NotificationDelivery::query()->firstOrCreate(
+            ['dedupe_key' => $key],
+            [
+                'event_type' => $event,
+                'channel' => $channel,
+                'recipient' => $recipient,
+                'subject' => $subject,
+                'payload' => $payload,
+                'status' => 'pending',
+            ]
+        );
+
+        if ($delivery->wasRecentlyCreated) {
+            $job = $approval
+                ? new SendDiscountApprovalNotifications($delivery->id)
+                : new SendDonationNotifications($delivery->id);
+            dispatch($job->afterCommit());
+        }
+    }
+
     /**
      * Dispatch automated donation alerts to partners via external webhooks or simulated channels.
      *

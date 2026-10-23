@@ -102,9 +102,8 @@ class AgentLogController extends Controller
     public function override(Request $request, AgentLog $agentLog, InventoryService $inventoryService): RedirectResponse
     {
         $validated = $request->validate([
-            'override_action' => ['required', 'string', 'in:revert,modify_discount,reassign_partner'],
+            'override_action' => ['required', 'string', 'in:revert,reassign_partner'],
             'reason' => ['required', 'string', 'min:5', 'max:1000'],
-            'discount_percentage' => ['nullable', 'numeric', 'min:1', 'max:99'],
             'partner_id' => ['nullable', 'integer', 'exists:donation_partners,id'],
         ]);
 
@@ -126,15 +125,6 @@ class AgentLogController extends Controller
                             'status' => 'active',
                         ]);
                     }
-                } elseif ($overrideAction === 'modify_discount' && isset($validated['discount_percentage'])) {
-                    $pct = (float) $validated['discount_percentage'];
-                    $originalPrice = (float) $product->original_price;
-                    $newDiscountPrice = round($originalPrice * (1 - ($pct / 100)), 2);
-
-                    $product->update([
-                        'status' => 'discounted',
-                        'discount_price' => $newDiscountPrice,
-                    ]);
                 } elseif ($overrideAction === 'reassign_partner' && $newPartnerId) {
                     $product->update([
                         'status' => 'reserved_donation',
@@ -158,7 +148,6 @@ class AgentLogController extends Controller
                     'product_name' => $product?->name,
                     'previous_payload' => $agentLog->payload,
                     'override_details' => [
-                        'discount_percentage' => $validated['discount_percentage'] ?? null,
                         'partner_id' => $newPartnerId,
                     ],
                     'applied_at' => now()->toIso8601String(),

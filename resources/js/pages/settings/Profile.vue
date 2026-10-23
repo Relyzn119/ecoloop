@@ -15,6 +15,7 @@ import { type BreadcrumbItem, type SharedData, type User } from '@/types';
 interface Props {
     mustVerifyEmail: boolean;
     status?: string;
+    telegramBotConfigured?: boolean;
     className?: string;
 }
 
@@ -33,6 +34,8 @@ const user = page.props.auth.user as User;
 const form = useForm({
     name: user.name,
     email: user.email,
+    phone: user.phone ?? '',
+    telegram_chat_id: user.telegram_chat_id ?? '',
 });
 
 const submit = () => {
@@ -48,13 +51,27 @@ const submit = () => {
 
         <SettingsLayout>
             <div class="flex flex-col space-y-6">
-                <HeadingSmall title="Profile information" description="Update your name and email address" />
+                <HeadingSmall title="Profile information" description="Update your contact details and Telegram chat ID for EcoLoop alerts" />
 
                 <form @submit.prevent="submit" class="space-y-6">
                     <div class="grid gap-2">
                         <Label for="name">Name</Label>
                         <Input id="name" class="mt-1 block w-full" v-model="form.name" required autocomplete="name" placeholder="Full name" />
                         <InputError class="mt-2" :message="form.errors.name" />
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="phone">Phone number</Label>
+                        <Input id="phone" type="tel" class="mt-1 block w-full" v-model="form.phone" autocomplete="tel" placeholder="+62..." />
+                        <InputError class="mt-2" :message="form.errors.phone" />
+                    </div>
+
+                    <div class="grid gap-2">
+                        <Label for="telegram_chat_id">Telegram chat ID</Label>
+                        <Input id="telegram_chat_id" class="mt-1 block w-full" v-model="form.telegram_chat_id" placeholder="Start your EcoLoop bot, then enter your chat ID" />
+                        <p class="text-sm text-muted-foreground">Start the EcoLoop bot, send <code>/id</code>, then paste the numeric chat ID here. A phone number alone cannot receive bot messages.</p>
+                        <p v-if="!telegramBotConfigured" class="text-sm text-amber-600">Telegram bot is not configured on the server yet.</p>
+                        <InputError class="mt-2" :message="form.errors.telegram_chat_id" />
                     </div>
 
                     <div class="grid gap-2">

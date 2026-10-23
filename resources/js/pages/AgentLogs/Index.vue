@@ -262,9 +262,8 @@ const getModelBadge = (payload: Record<string, any>) => {
 // ─── Manual Override Modal ──────────────────────────────────────────────────
 const selectedLogForOverride = ref<AgentLogItem | null>(null);
 const isOverrideModalOpen = ref(false);
-const overrideAction = ref<'revert' | 'modify_discount' | 'reassign_partner'>('revert');
+const overrideAction = ref<'revert' | 'reassign_partner'>('revert');
 const overrideReason = ref('');
-const overrideDiscountPercentage = ref<number>(30);
 const overridePartnerId = ref<number | ''>('');
 const isSubmittingOverride = ref(false);
 const overrideErrorMessage = ref('');
@@ -276,7 +275,6 @@ const openOverrideModal = (log: AgentLogItem) => {
 
     if (log.action_type === 'discount_applied') {
         overrideAction.value = 'revert';
-        overrideDiscountPercentage.value = log.payload?.discount_percentage || 25;
     } else if (log.action_type === 'donation_requested') {
         overrideAction.value = 'revert';
         overridePartnerId.value = props.partners[0]?.id || '';
@@ -293,26 +291,12 @@ const closeOverrideModal = () => {
     overrideErrorMessage.value = '';
 };
 
-const previewModifiedPrice = computed(() => {
-    if (!selectedLogForOverride.value?.product?.original_price) return 0;
-    const orig = selectedLogForOverride.value.product.original_price;
-    const pct = overrideDiscountPercentage.value || 0;
-    return Math.max(0, orig * (1 - pct / 100)).toFixed(2);
-});
-
 const submitManualOverride = () => {
     if (!selectedLogForOverride.value) return;
 
     if (!overrideReason.value.trim() || overrideReason.value.trim().length < 5) {
         overrideErrorMessage.value = 'Please provide an override justification with at least 5 characters.';
         return;
-    }
-
-    if (overrideAction.value === 'modify_discount') {
-        if (!overrideDiscountPercentage.value || overrideDiscountPercentage.value < 1 || overrideDiscountPercentage.value > 99) {
-            overrideErrorMessage.value = 'Discount percentage must be between 1% and 99%.';
-            return;
-        }
     }
 
     if (overrideAction.value === 'reassign_partner' && !overridePartnerId.value) {
@@ -328,7 +312,6 @@ const submitManualOverride = () => {
         {
             override_action: overrideAction.value,
             reason: overrideReason.value.trim(),
-            discount_percentage: overrideAction.value === 'modify_discount' ? overrideDiscountPercentage.value : undefined,
             partner_id: overrideAction.value === 'reassign_partner' ? overridePartnerId.value : undefined,
         },
         {
@@ -1118,29 +1101,6 @@ const submitManualOverride = () => {
                                 </div>
                             </label>
 
-                            <!-- Modify Discount Option (if applicable) -->
-                            <label
-                                v-if="selectedLogForOverride.action_type === 'discount_applied'"
-                                class="flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition"
-                                :class="
-                                    overrideAction === 'modify_discount'
-                                        ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20'
-                                        : 'border-neutral-200 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/40'
-                                "
-                            >
-                                <input
-                                    type="radio"
-                                    name="override_action"
-                                    value="modify_discount"
-                                    v-model="overrideAction"
-                                    class="mt-0.5 text-emerald-600 focus:ring-emerald-500"
-                                />
-                                <div>
-                                    <span class="text-xs font-bold text-neutral-900 dark:text-neutral-100"> Adjust Markdown Percentage </span>
-                                    <p class="mt-0.5 text-[11px] text-muted-foreground">Change the dynamic discount rate to a custom percentage.</p>
-                                </div>
-                            </label>
-
                             <!-- Reassign Partner Option (if applicable) -->
                             <label
                                 v-if="selectedLogForOverride.action_type === 'donation_requested'"
@@ -1165,22 +1125,6 @@ const submitManualOverride = () => {
                                     </p>
                                 </div>
                             </label>
-                        </div>
-                    </div>
-
-                    <!-- Dynamic field: Discount Percentage Slider & Preview -->
-                    <div
-                        v-if="overrideAction === 'modify_discount'"
-                        class="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-950"
-                    >
-                        <div class="flex items-center justify-between text-xs">
-                            <span class="font-medium text-neutral-700 dark:text-neutral-300">New Discount Rate:</span>
-                            <span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">{{ overrideDiscountPercentage }}% OFF</span>
-                        </div>
-                        <input type="range" min="5" max="90" step="5" v-model.number="overrideDiscountPercentage" class="w-full accent-emerald-600" />
-                        <div class="mt-1 flex justify-between text-[11px] text-muted-foreground">
-                            <span>Original: ${{ Number(selectedLogForOverride.product?.original_price || 0).toFixed(2) }}</span>
-                            <span class="font-semibold text-foreground">New Price: ${{ previewModifiedPrice }}</span>
                         </div>
                     </div>
 

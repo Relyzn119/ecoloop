@@ -3,7 +3,6 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
-    AlertCircle,
     AlertTriangle,
     ArrowUpRight,
     Bot,
@@ -11,7 +10,6 @@ import {
     Clock,
     Coins,
     ExternalLink,
-    FlaskConical,
     Handshake,
     Leaf,
     Package,
@@ -90,7 +88,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const page = usePage();
 const flash = computed(() => page.props.flash as Record<string, string> | undefined);
 const dismissedFlashes = ref<Set<string>>(new Set());
-const localFeedback = ref<{ type: 'success' | 'info' | 'error'; message: string } | null>(null);
+const isRefreshing = ref(false);
 
 function dismissFlash(type: string) {
     dismissedFlashes.value.add(type);
@@ -100,86 +98,16 @@ function isFlashVisible(type: string): boolean {
     return !dismissedFlashes.value.has(type) && !!flash.value?.[type];
 }
 
-// Interactive AI Scan Simulation
-const isScanning = ref(false);
-const quickActionLoading = ref<number | null>(null);
-
-async function triggerAiScan() {
-    isScanning.value = true;
-    localFeedback.value = null;
-
-    try {
-        const response = await fetch('/api/v1/ai/simulate-run', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-            },
-            body: JSON.stringify({ days: 3 }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            const actionsCount = data.data?.actions_count ?? 0;
-            localFeedback.value = {
-                type: 'success',
-                message: `AI Agent cycle finished: ${actionsCount} automated actions executed successfully.`,
-            };
-
-            // Reload Inertia props to sync dashboard state
-            router.reload({
-                only: ['metrics', 'recent_agent_logs', 'urgent_products'],
-            });
-        } else {
-            localFeedback.value = {
-                type: 'error',
-                message: data.message || 'AI Scan simulation failed.',
-            };
-        }
-    } catch {
-        localFeedback.value = {
-            type: 'error',
-            message: 'Unable to communicate with EcoLoop AI service.',
-        };
-    } finally {
-        isScanning.value = false;
-    }
-}
-
-// Quick 1-click Markdown for urgent item
-async function quickDiscount(productId: number) {
-    quickActionLoading.value = productId;
-    try {
-        const response = await fetch('/api/v1/inventory/apply-discount', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-            },
-            body: JSON.stringify({
-                product_id: productId,
-                discount_percentage: 40,
-                reason: 'Operator 1-click clearance markdown from dashboard table.',
-            }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            localFeedback.value = {
-                type: 'success',
-                message: `Applied 40% discount to ${data.data?.name}. New price: $${Number(data.data?.discount_price).toFixed(2)}.`,
-            };
-            router.reload({ only: ['metrics', 'recent_agent_logs', 'urgent_products'] });
-        }
-    } catch {
-        localFeedback.value = {
-            type: 'error',
-            message: 'Failed to apply discount.',
-        };
-    } finally {
-        quickActionLoading.value = null;
-    }
+function refreshDashboard() {
+    router.reload({
+        only: ['metrics', 'recent_agent_logs', 'urgent_products'],
+        onStart: () => {
+            isRefreshing.value = true;
+        },
+        onFinish: () => {
+            isRefreshing.value = false;
+        },
+    });
 }
 </script>
 
@@ -188,29 +116,7 @@ async function quickDiscount(productId: number) {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex h-full flex-1 flex-col gap-6 p-4 sm:p-6">
-            <!-- Flash & System Feedback Notifications -->
-            <Transition name="flash">
-                <div
-                    v-if="localFeedback"
-                    class="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm transition"
-                    :class="{
-                        'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300':
-                            localFeedback.type === 'success',
-                        'border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300':
-                            localFeedback.type === 'error',
-                        'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-300':
-                            localFeedback.type === 'info',
-                    }"
-                >
-                    <CheckCircle2 v-if="localFeedback.type === 'success'" class="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <AlertCircle v-else class="size-5 shrink-0 text-red-600 dark:text-red-400" />
-                    <span class="flex-1 font-medium">{{ localFeedback.message }}</span>
-                    <button @click="localFeedback = null" class="shrink-0 rounded-md p-1 hover:bg-black/5 dark:hover:bg-white/10">
-                        <X class="size-4" />
-                    </button>
-                </div>
-            </Transition>
-
+            <!-- Flash notification -->
             <Transition name="flash">
                 <div
                     v-if="isFlashVisible('success')"
@@ -237,21 +143,13 @@ async function quickDiscount(productId: number) {
                 <div class="flex flex-wrap items-center gap-2.5">
                     <button
                         type="button"
-                        :disabled="isScanning"
-                        @click="triggerAiScan"
+                        :disabled="isRefreshing"
+                        @click="refreshDashboard"
                         class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
                     >
-                        <RefreshCw class="size-4" :class="{ 'animate-spin': isScanning }" />
-                        <span>{{ isScanning ? 'Evaluating Shelf-Life...' : 'Trigger AI Scan (Mock/Live)' }}</span>
+                        <RefreshCw class="size-4" :class="{ 'animate-spin': isRefreshing }" />
+                        <span>{{ isRefreshing ? 'Refreshing…' : 'Refresh data' }}</span>
                     </button>
-
-                    <Link
-                        href="/simulation"
-                        class="inline-flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-500/20 dark:text-emerald-400 dark:hover:bg-emerald-500/30"
-                    >
-                        <FlaskConical class="size-4 text-emerald-600 dark:text-emerald-400" />
-                        <span>AI Sandbox Demo</span>
-                    </Link>
 
                     <Link
                         href="/inventory"
@@ -412,7 +310,6 @@ async function quickDiscount(productId: number) {
                                     <th class="px-4 py-3">Price</th>
                                     <th class="px-4 py-3">Expires In</th>
                                     <th class="px-4 py-3">Status</th>
-                                    <th class="px-6 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-sidebar-border/60">
@@ -461,23 +358,10 @@ async function quickDiscount(productId: number) {
                                             {{ item.status.replace('_', ' ') }}
                                         </span>
                                     </td>
-                                    <td class="px-6 py-3.5 text-right">
-                                        <button
-                                            v-if="item.status === 'active'"
-                                            type="button"
-                                            :disabled="quickActionLoading === item.id"
-                                            @click="quickDiscount(item.id)"
-                                            class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                                        >
-                                            <Tag class="size-3" />
-                                            <span>{{ quickActionLoading === item.id ? 'Marking...' : '-40%' }}</span>
-                                        </button>
-                                        <span v-else class="text-xs text-muted-foreground">Handled</span>
-                                    </td>
                                 </tr>
 
                                 <tr v-if="urgent_products.length === 0">
-                                    <td colspan="7" class="py-12 text-center text-sm text-muted-foreground">
+                                    <td colspan="6" class="py-12 text-center text-sm text-muted-foreground">
                                         No critical expiration items detected. All products have healthy shelf-life buffers.
                                     </td>
                                 </tr>
@@ -564,7 +448,7 @@ async function quickDiscount(productId: number) {
                         <div v-if="recent_agent_logs.length === 0" class="py-12 text-center text-sm text-muted-foreground">
                             <Bot class="mx-auto mb-2 size-8 opacity-40" />
                             <p>No autonomous logs recorded yet.</p>
-                            <p class="text-xs">Click "Trigger AI Scan" to run the evaluation engine.</p>
+                            <p class="text-xs">New inventory is evaluated automatically when it is saved.</p>
                         </div>
                     </div>
 

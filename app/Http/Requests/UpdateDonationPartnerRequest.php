@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateDonationPartnerRequest extends FormRequest
 {
@@ -27,6 +28,7 @@ class UpdateDonationPartnerRequest extends FormRequest
             'contact_person' => ['required', 'string', 'max:150'],
             'phone' => ['required', 'string', 'max:50'],
             'email' => ['required', 'email', 'max:150'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:64', 'regex:/^-?\d+$/', Rule::unique('donation_partners', 'telegram_chat_id')->ignore($this->route('donation_partner'))],
             'address' => ['required', 'string', 'max:1000'],
             'is_active' => ['sometimes', 'boolean'],
         ];

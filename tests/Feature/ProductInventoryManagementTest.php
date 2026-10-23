@@ -230,7 +230,7 @@ test('authenticated user can delete a product', function () {
     ]);
 });
 
-test('authenticated user can apply manual markdown discount to product', function () {
+test('manual markdown creates an approval request without changing the product price', function () {
     $user = User::factory()->create();
     $product = Product::factory()->create([
         'original_price' => 50000,
@@ -245,13 +245,10 @@ test('authenticated user can apply manual markdown discount to product', functio
     $response->assertRedirect();
     $product->refresh();
 
-    expect($product->status)->toBe('discounted');
-    expect((float) $product->discount_price)->toBe(30000.0);
-
-    $this->assertDatabaseHas('agent_logs', [
-        'product_id' => $product->id,
-        'action_type' => 'discount_applied',
-    ]);
+    expect($product->status)->toBe('active');
+    expect($product->discount_price)->toBeNull();
+    expect($product->discountApprovals()->first()->status)->toBe('pending');
+    expect($product->discountApprovals()->first()->recommended_percentage)->toBe(40);
 });
 
 test('authenticated user can reserve product for donation to partner', function () {

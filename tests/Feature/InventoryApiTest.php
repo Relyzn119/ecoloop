@@ -43,7 +43,7 @@ test('can retrieve expiring soon products via api', function () {
         ->assertJsonPath('meta.total_count', 2);
 });
 
-test('can apply markdown discount via api', function () {
+test('discount api creates pending approval without changing the product price', function () {
     $product = Product::factory()->create([
         'original_price' => 10.00,
         'discount_price' => null,
@@ -58,21 +58,16 @@ test('can apply markdown discount via api', function () {
 
     $response = $this->postJson('/api/v1/inventory/apply-discount', $payload);
 
-    $response->assertStatus(200)
+    $response->assertStatus(202)
         ->assertJsonPath('success', true)
-        ->assertJsonPath('data.status', 'discounted')
-        ->assertJsonPath('data.discount_price', fn ($val) => (float) $val === 6.00);
+        ->assertJsonPath('message', 'Discount recommendation sent for manager or cashier approval; no price was changed.');
 
-    // Verify database updates
-    expect($product->fresh()->status)->toBe('discounted')
-        ->and((float) $product->fresh()->discount_price)->toBe(6.00);
+    expect($product->fresh()->status)->toBe('active')
+        ->and($product->fresh()->discount_price)->toBeNull()
+        ->and($product->batches()->first()->discount_price)->toBeNull()
+        ->and($product->discountApprovals()->first()->status)->toBe('pending');
 
-    // Verify agent log entry
-    $log = AgentLog::where('product_id', $product->id)->first();
-    expect($log)->not->toBeNull()
-        ->and($log->action_type)->toBe('discount_applied')
-        ->and($log->reasoning)->toBe('AI dynamic markdown: Expiring within 48h.')
-        ->and($log->payload['discount_percentage'])->toBe(40);
+    expect($product->discountApprovals()->first()->reasoning)->toBe('AI dynamic markdown: Expiring within 48h.');
 });
 
 test('apply discount endpoint validates input strictly', function () {
@@ -196,11 +191,12 @@ test('n8n webhook endpoint accepts external automation commands', function () {
         'discount_percentage' => 25,
         'reason' => 'Dispatched from n8n AI workflow.',
     ])
-        ->assertStatus(200)
+        ->assertStatus(202)
         ->assertJsonPath('success', true)
-        ->assertJsonPath('data.discount_price', fn ($val) => (float) $val === 15.00);
+        ->assertJsonPath('message', 'Discount recommendation sent for approval; no price was changed.');
 
-    expect($product->fresh()->status)->toBe('discounted');
+    expect($product->fresh()->status)->toBe('active')
+        ->and($product->discountApprovals()->where('status', 'pending')->exists())->toBeTrue();
 });
 
 test('inventory service throws exception on invalid discount percentage', function () {

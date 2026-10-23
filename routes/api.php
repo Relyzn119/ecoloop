@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\InventoryApiController;
+use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\WorkflowIntegrationController;
 use Illuminate\Support\Facades\Route;
 
@@ -11,6 +12,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::prefix('v1')->group(function () {
+    Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:60,1')->name('api.v1.telegram.webhook');
     // Inventory Automation Endpoints
     Route::prefix('inventory')->group(function () {
         Route::get('expiring-soon', [InventoryApiController::class, 'expiringSoon'])->name('api.v1.inventory.expiring-soon');

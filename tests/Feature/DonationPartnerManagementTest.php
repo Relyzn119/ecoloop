@@ -237,7 +237,7 @@ test('notification service sends http post to n8n webhook when configured', func
     ]);
 });
 
-test('reserving donation in inventory service automatically triggers notification alert', function () {
+test('reserving donation records the database action without reporting a delivery before donation is complete', function () {
     $partner = DonationPartner::factory()->create(['name' => 'Metro Care Pantry']);
     $product = Product::factory()->create(['status' => 'active', 'quantity' => 15]);
 
@@ -247,13 +247,13 @@ test('reserving donation in inventory service automatically triggers notificatio
     $product->refresh();
     expect($product->status)->toBe('reserved_donation');
 
-    // Verify both logs exist: donation_requested AND alert_sent
+    // A pending reservation is not yet a completed donation and sends no completion notification.
     $this->assertDatabaseHas('agent_logs', [
         'product_id' => $product->id,
         'action_type' => 'donation_requested',
     ]);
 
-    $this->assertDatabaseHas('agent_logs', [
+    $this->assertDatabaseMissing('agent_logs', [
         'product_id' => $product->id,
         'action_type' => 'alert_sent',
     ]);

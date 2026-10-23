@@ -35,10 +35,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('agent-logs/{agent_log}/override', [AgentLogController::class, 'override'])->name('agent-logs.override');
     Route::post('agent-logs/simulate', [AgentLogController::class, 'simulate'])->name('agent-logs.simulate');
 
-    // Dedicated AI Simulation Sandbox for Live Demo Presentations
+    // Read-only inventory and autonomous agent status monitor
     Route::get('simulation', [SimulationController::class, 'index'])->name('simulation.index');
-    Route::post('simulation/trigger', [SimulationController::class, 'triggerProductEvaluation'])->name('simulation.trigger');
-    Route::post('simulation/reset/{product}', [SimulationController::class, 'resetProduct'])->name('simulation.reset');
 });
 
 require __DIR__.'/settings.php';
