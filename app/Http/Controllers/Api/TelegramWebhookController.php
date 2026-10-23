@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DiscountApproval;
 use App\Models\User;
 use App\Services\DiscountApprovalService;
 use App\Services\TelegramBotService;
@@ -22,6 +23,7 @@ class TelegramWebhookController extends Controller
             'callback_query' => ['sometimes', 'array'],
             'callback_query.id' => ['required_with:callback_query', 'string'],
             'callback_query.data' => ['required_with:callback_query', 'string', 'max:100'],
+            'callback_query.from.id' => ['required_with:callback_query', 'numeric'],
             'callback_query.message.chat.id' => ['required_with:callback_query', 'numeric'],
             'message' => ['sometimes', 'array'],
             'message.chat.id' => ['required_with:message', 'numeric'],
@@ -32,10 +34,28 @@ class TelegramWebhookController extends Controller
         try {
             if (isset($update['callback_query'])) {
                 $callback = $update['callback_query'];
-                $user = $this->authorizedUser((string) $callback['message']['chat']['id']);
+                // Telegram identifies the user separately from the chat. In private chats
+                // they usually match; in groups the chat ID must not be used for authorization.
+                $user = $this->authorizedUser((string) $callback['from']['id']);
                 $chatId = (string) $callback['message']['chat']['id'];
                 [$decision, $approvalId] = array_pad(explode(':', $callback['data'], 2), 2, '');
                 abort_unless(in_array($decision, ['approve', 'reject'], true) && ctype_digit($approvalId), 422);
+
+                $existingApproval = DiscountApproval::query()->findOrFail((int) $approvalId);
+                if ($existingApproval->status !== 'pending') {
+                    $message = match ($existingApproval->status) {
+                        'approved' => 'Already approved at '.$existingApproval->approved_percentage.'%.',
+                        'rejected' => 'This discount request was already rejected.',
+                        default => 'This discount request has already been processed.',
+                    };
+                    $telegram->answerCallback((string) $callback['id'], $message);
+
+                    return response()->json([
+                        'ok' => true,
+                        'approval_id' => $existingApproval->id,
+                        'already_processed' => true,
+                    ]);
+                }
 
                 $approval = $approvals->decide((int) $approvalId, $user, $decision);
                 $telegram->answerCallback((string) $callback['id'], $decision === 'approve'
