@@ -5,7 +5,7 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, FlaskConical, Folder, Handshake, LayoutGrid, Package, ScrollText, Settings } from 'lucide-vue-next';
+import { FlaskConical, Handshake, HeartHandshake, LayoutGrid, Package, Percent, ScrollText, Settings } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const mainNavItems: NavItem[] = [
@@ -43,14 +43,14 @@ const mainNavItems: NavItem[] = [
 
 const footerNavItems: NavItem[] = [
     {
-        title: 'Github Repo',
-        href: 'https://github.com/ecoloop-agent/ecoloop',
-        icon: Folder,
+        title: 'Rekap Donasi (PDF)',
+        href: '/reports?type=donation',
+        icon: HeartHandshake,
     },
     {
-        title: 'Documentation',
-        href: 'https://docs.ecoloop.dev',
-        icon: BookOpen,
+        title: 'Rekap Diskon (PDF)',
+        href: '/reports?type=discount',
+        icon: Percent,
     },
 ];
 </script>

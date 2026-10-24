@@ -9,7 +9,9 @@ use App\Models\Product;
 use App\Models\ProductBatch;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class InventoryService
 {
@@ -163,6 +165,95 @@ class InventoryService
 
             return $product->fresh(['category', 'agentLogs']);
         });
+    }
+
+    /** Donate the remaining quantity from one visually reviewed batch. */
+    public function donateReviewedBatch(int $batchId, int $partnerId, string $reason): array
+    {
+        $donation = DB::transaction(function () use ($batchId, $partnerId, $reason): ?array {
+            $batch = ProductBatch::query()->lockForUpdate()->findOrFail($batchId);
+            $product = Product::query()->with('category')->findOrFail($batch->product_id);
+            $partner = DonationPartner::query()->active()->whereNotNull('telegram_chat_id')->findOrFail($partnerId);
+
+            if ($batch->quantity_available < 1
+                || ! in_array($batch->status, ['active', 'discounted'], true)
+                || $batch->expiration_date->lt(now()->startOfDay())) {
+                return null;
+            }
+
+            $quantity = $batch->quantity_available;
+            $batch->update([
+                'quantity_available' => 0,
+                'quantity_donated' => $batch->quantity_donated + $quantity,
+                'status' => 'donated',
+            ]);
+
+            AgentLog::query()->create([
+                'product_id' => $product->id,
+                'partner_id' => $partner->id,
+                'action_type' => 'donation_requested',
+                'reasoning' => $reason,
+                'payload' => [
+                    'event_type' => 'donation_completed',
+                    'source' => 'ai_photo_review',
+                    'batch_id' => $batch->id,
+                    'batch_code' => $batch->batch_code,
+                    'quantity_donated' => $quantity,
+                    'unit' => $product->unit,
+                    'partner_id' => $partner->id,
+                ],
+                'status' => 'success',
+            ]);
+
+            $this->refreshProductStockSummary($product->id);
+
+            return [
+                'partner' => $partner,
+                'product' => $product->fresh(),
+                'batch' => $batch->fresh(),
+                'quantity' => $quantity,
+                'reason' => $reason,
+            ];
+        });
+
+        if ($donation === null) {
+            return ['success' => false, 'message' => 'Batch ini sudah tidak memiliki stok tersedia. Muat ulang data sebelum mencoba lagi.'];
+        }
+
+        $notificationsQueued = true;
+        try {
+            $this->notificationService->queueDonationAlerts(
+                $donation['partner'],
+                $donation['product'],
+                $donation['batch'],
+                $donation['reason']
+            );
+        } catch (Throwable $exception) {
+            $notificationsQueued = false;
+            Log::error('Donation succeeded but notification queueing failed.', [
+                'product_id' => $donation['product']->id,
+                'batch_id' => $donation['batch']->id,
+                'partner_id' => $donation['partner']->id,
+                'error' => $exception->getMessage(),
+            ]);
+            AgentLog::query()->create([
+                'product_id' => $donation['product']->id,
+                'partner_id' => $donation['partner']->id,
+                'action_type' => 'alert_sent',
+                'reasoning' => 'Donation was completed, but one or more notification deliveries could not be queued.',
+                'payload' => ['event_type' => 'donation_completed', 'batch_id' => $donation['batch']->id],
+                'status' => 'failed',
+            ]);
+        }
+
+        return [
+            'success' => true,
+            'quantity' => $donation['quantity'],
+            'unit' => $donation['product']->unit,
+            'product_name' => $donation['product']->name,
+            'partner_name' => $donation['partner']->name,
+            'notifications_queued' => $notificationsQueued,
+        ];
     }
 
     /**

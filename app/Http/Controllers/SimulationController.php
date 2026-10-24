@@ -5,16 +5,25 @@ namespace App\Http\Controllers;
 use App\Http\Resources\AgentLogResource;
 use App\Models\AgentLog;
 use App\Models\DiscountApproval;
+use App\Models\DonationPartner;
 use App\Models\ProductBatch;
+use App\Services\AiAgentService;
+use App\Services\InventoryService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class SimulationController extends Controller
 {
     /**
      * Display the latest inventory batches, pending discount approvals, and agent activity.
      */
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $batches = ProductBatch::query()
             ->with(['product:id,sku,name,category_id,unit', 'product.category:id,name'])
@@ -73,11 +82,148 @@ class SimulationController extends Controller
             ->limit(10)
             ->get();
 
+        $donationBatches = ProductBatch::query()
+            ->with('product:id,sku,name,unit')
+            ->where('quantity_available', '>', 0)
+            ->whereIn('status', ['active', 'discounted'])
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->orderBy('expiration_date')
+            ->get()
+            ->map(fn (ProductBatch $batch): array => [
+                'id' => $batch->id,
+                'name' => $batch->product->name,
+                'sku' => $batch->product->sku,
+                'batch_code' => $batch->batch_code,
+                'quantity_available' => $batch->quantity_available,
+                'unit' => $batch->product->unit,
+                'expiration_date' => $batch->expiration_date->toDateString(),
+            ]);
+
+        $partners = DonationPartner::query()
+            ->active()
+            ->orderBy('name')
+            ->get(['id', 'name', 'telegram_chat_id'])
+            ->map(fn (DonationPartner $partner): array => [
+                'id' => $partner->id,
+                'name' => $partner->name,
+                'telegram_ready' => filled($partner->telegram_chat_id),
+            ]);
+
         return Inertia::render('Simulation/Index', [
             'batches' => $batches,
+            'donationBatches' => $donationBatches,
+            'donationPartners' => $partners,
             'pendingApprovals' => $pendingApprovals,
             'recentLogs' => AgentLogResource::collection($recentLogs),
             'lastUpdatedAt' => now()->toIso8601String(),
+            'visionResult' => $request->session()->get('visionResult'),
         ]);
+    }
+
+    /** Analyze a single photo without changing inventory. */
+    public function analyzeDonationPhoto(Request $request, AiAgentService $aiAgentService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'batch_id' => ['required', 'integer', 'exists:product_batches,id'],
+            'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        $batch = ProductBatch::query()
+            ->with('product.category')
+            ->where('quantity_available', '>', 0)
+            ->whereIn('status', ['active', 'discounted'])
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->find($validated['batch_id']);
+
+        if (! $batch) {
+            return back()->withErrors(['batch_id' => 'Batch tersebut sudah tidak memiliki stok tersedia. Muat ulang halaman.']);
+        }
+
+        $photo = $request->file('photo');
+        $decision = $aiAgentService->evaluateDonationPhoto(
+            $batch->product,
+            $batch,
+            base64_encode($photo->get()),
+            (string) $photo->getMimeType()
+        );
+
+        $reviewToken = null;
+        if ($decision['donation_eligible']) {
+            $reviewToken = (string) Str::uuid();
+            $request->session()->put('simulation_vision_reviews.'.$reviewToken, [
+                'batch_id' => $batch->id,
+                'reasoning' => $decision['reasoning'],
+                'expires_at' => now()->addMinutes(15)->timestamp,
+            ]);
+        }
+
+        return back()->with('visionResult', [
+            ...$decision,
+            'batch_id' => $batch->id,
+            'product_name' => $batch->product->name,
+            'batch_code' => $batch->batch_code,
+            'quantity_available' => $batch->quantity_available,
+            'unit' => $batch->product->unit,
+            'review_token' => $reviewToken,
+        ]);
+    }
+
+    /** Complete donation only after an eligible photo result and an explicit user click. */
+    public function donateReviewedBatch(Request $request, InventoryService $inventoryService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'review_token' => ['required', 'uuid'],
+            'partner_id' => [
+                'required',
+                'integer',
+                Rule::exists('donation_partners', 'id')
+                    ->where('is_active', true)
+                    ->whereNotNull('telegram_chat_id'),
+            ],
+        ]);
+
+        $sessionKey = 'simulation_vision_reviews.'.$validated['review_token'];
+        $review = $request->session()->get($sessionKey);
+        if (! is_array($review) || ($review['expires_at'] ?? 0) < now()->timestamp) {
+            $request->session()->forget($sessionKey);
+
+            return back()->with('error', 'Hasil pemeriksaan foto sudah kedaluwarsa. Silakan lakukan analisis foto lagi.');
+        }
+
+        try {
+            $result = $inventoryService->donateReviewedBatch(
+                (int) $review['batch_id'],
+                (int) $validated['partner_id'],
+                (string) $review['reasoning']
+            );
+        } catch (Throwable $exception) {
+            Log::warning('Photo-reviewed donation could not be completed.', [
+                'batch_id' => $review['batch_id'] ?? null,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()->with('error', 'Donasi belum berhasil. Periksa stok dan mitra, lalu muat ulang halaman.');
+        }
+
+        if (! $result['success']) {
+            $request->session()->forget($sessionKey);
+
+            return back()->with('error', $result['message']);
+        }
+
+        $request->session()->forget($sessionKey);
+
+        $message = sprintf(
+            '%d %s %s berhasil didonasikan ke %s.',
+            $result['quantity'],
+            $result['unit'],
+            $result['product_name'],
+            $result['partner_name']
+        );
+        $message .= $result['notifications_queued']
+            ? ' Pemberitahuan email dan Telegram telah dimasukkan ke antrean.'
+            : ' Namun antrean notifikasi gagal dibuat; periksa log aplikasi sebelum menyampaikan kepada mitra.';
+
+        return back()->with('success', $message);
     }
 }

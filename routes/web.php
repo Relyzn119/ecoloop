@@ -4,6 +4,7 @@ use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DonationPartnerController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SimulationController;
 use Illuminate\Support\Facades\Route;
 
@@ -39,6 +40,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Read-only inventory and autonomous agent status monitor
     Route::get('simulation', [SimulationController::class, 'index'])->name('simulation.index');
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::post('simulation/vision/analyze', [SimulationController::class, 'analyzeDonationPhoto'])->name('simulation.vision.analyze');
+    Route::post('simulation/vision/donate', [SimulationController::class, 'donateReviewedBatch'])->name('simulation.vision.donate');
 });
 
 require __DIR__.'/settings.php';
