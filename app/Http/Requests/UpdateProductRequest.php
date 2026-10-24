@@ -43,7 +43,7 @@ class UpdateProductRequest extends FormRequest
             'original_price' => ['required', 'numeric', 'min:0'],
             'discount_price' => ['nullable', 'numeric', 'min:0', 'lte:original_price'],
             'expiration_date' => ['required', 'date'],
-            'status' => ['required', 'string', 'in:active,discounted,reserved_donation,donated,disposed'],
+            'status' => ['required', 'string', 'in:active,discounted,reserved_donation,donated,disposed,sold_out'],
         ];
     }
 

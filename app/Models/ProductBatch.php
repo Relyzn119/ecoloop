@@ -16,7 +16,7 @@ class ProductBatch extends Model
     protected $fillable = [
         'product_id', 'batch_code', 'quantity_received', 'quantity_available',
         'quantity_donated', 'quantity_sold', 'expiration_date', 'original_price',
-        'discount_price', 'status', 'source', 'source_reference',
+        'discount_price', 'status', 'source', 'source_reference', 'store_code', 'source_synced_at',
     ];
 
     protected function casts(): array
@@ -27,6 +27,7 @@ class ProductBatch extends Model
             'quantity_donated' => 'integer',
             'quantity_sold' => 'integer',
             'expiration_date' => 'date',
+            'source_synced_at' => 'datetime',
             'original_price' => 'decimal:2',
             'discount_price' => 'decimal:2',
         ];

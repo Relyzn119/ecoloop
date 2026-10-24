@@ -41,6 +41,8 @@ class SimulationController extends Controller
                     'discount_price' => $batch->discount_price !== null ? (float) $batch->discount_price : null,
                     'status' => $batch->status,
                     'source' => $batch->source,
+                    'store_code' => $batch->store_code,
+                    'source_synced_at' => $batch->source_synced_at?->toIso8601String(),
                     'expiration_date' => $batch->expiration_date->toDateString(),
                     'days_remaining' => $daysRemaining,
                 ];

@@ -19,6 +19,8 @@ interface DonationPartnerItem {
 
 interface ProductItem {
     id: number;
+    external_id: string | null;
+    source_system: string | null;
     sku: string;
     name: string;
     description: string | null;
@@ -38,7 +40,7 @@ interface ProductItem {
     expiration_date_formatted: string;
     days_remaining: number;
     urgency: 'critical' | 'warning' | 'safe' | 'expired';
-    status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed';
+    status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed' | 'sold_out';
     created_at?: string;
 }
 
@@ -66,6 +68,21 @@ interface InventoryStats {
     reserved_donation_count: number;
 }
 
+interface AutoSyncSummary {
+    new_products: number;
+    new_batches: number;
+    received_units: number;
+    sales_transactions: number;
+    sold_units: number;
+    changed_products: number;
+}
+
+interface AutoSyncState {
+    auto_sync_enabled: boolean;
+    last_synced_at: string | null;
+    last_sync_summary: AutoSyncSummary | null;
+}
+
 interface Filters {
     search: string;
     category: string | number;
@@ -81,6 +98,7 @@ const props = defineProps<{
     categories: CategoryItem[];
     donation_partners: DonationPartnerItem[];
     stats: InventoryStats;
+    auto_sync: AutoSyncState;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -91,6 +109,30 @@ const breadcrumbs: BreadcrumbItem[] = [
 const page = usePage();
 const flashSuccess = computed(() => (page.props as any).flash?.success);
 const flashError = computed(() => (page.props as any).flash?.error);
+const isSyncing = ref(false);
+const isTogglingAutoSync = ref(false);
+
+const runAutoSyncNow = () => {
+    isSyncing.value = true;
+    router.post('/inventory/auto-sync/run', {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            isSyncing.value = false;
+        },
+    });
+};
+
+const toggleAutoSync = () => {
+    isTogglingAutoSync.value = true;
+    router.post('/inventory/auto-sync/toggle', {
+        enabled: !props.auto_sync.auto_sync_enabled,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            isTogglingAutoSync.value = false;
+        },
+    });
+};
 
 // Filter state
 const search = ref(props.filters.search || '');
@@ -297,6 +339,8 @@ const getStatusBadgeClasses = (status: ProductItem['status']) => {
             return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
         case 'disposed':
             return 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20 line-through';
+        case 'sold_out':
+            return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
         default:
             return 'bg-neutral-500/10 text-neutral-400';
     }
@@ -314,6 +358,8 @@ const formatStatusLabel = (status: ProductItem['status']) => {
             return 'Donated';
         case 'disposed':
             return 'Disposed';
+        case 'sold_out':
+            return 'Sold Out';
         default:
             return status;
     }
@@ -368,6 +414,51 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                     </Link>
                 </div>
             </div>
+
+            <section class="flex flex-col gap-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h2 class="font-semibold text-neutral-900 dark:text-neutral-100">Supermarket Central Sync</h2>
+                        <span
+                            class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                            :class="auto_sync.auto_sync_enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-neutral-500/10 text-neutral-500'"
+                        >
+                            {{ auto_sync.auto_sync_enabled ? 'Auto Sync On' : 'Paused' }}
+                        </span>
+                        <span class="rounded-full bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">DEMO DATA</span>
+                    </div>
+                    <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                        Simulates central product receipts and POS sales every 5 minutes. Manual product entry remains available.
+                    </p>
+                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        Last sync: {{ auto_sync.last_synced_at ? new Date(auto_sync.last_synced_at).toLocaleString() : 'Not synced yet' }}
+                        <template v-if="auto_sync.last_sync_summary">
+                            · {{ auto_sync.last_sync_summary.new_products }} new products
+                            · {{ auto_sync.last_sync_summary.received_units }} units received
+                            · {{ auto_sync.last_sync_summary.sold_units }} units sold
+                        </template>
+                    </p>
+                </div>
+                <div class="flex shrink-0 flex-wrap gap-2">
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+                        :disabled="isTogglingAutoSync"
+                        @click="toggleAutoSync"
+                    >
+                        {{ auto_sync.auto_sync_enabled ? 'Pause Auto Sync' : 'Enable Auto Sync' }}
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        :disabled="isSyncing"
+                        @click="runAutoSyncNow"
+                    >
+                        <RefreshCw class="size-4" :class="{ 'animate-spin': isSyncing }" />
+                        {{ isSyncing ? 'Syncing…' : 'Sync Now' }}
+                    </button>
+                </div>
+            </section>
 
             <!-- Metric Summary Cards -->
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
@@ -494,6 +585,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                             <option value="discounted">Discounted</option>
                             <option value="reserved_donation">Reserved Donation</option>
                             <option value="donated">Donated</option>
+                            <option value="sold_out">Sold Out</option>
                             <option value="disposed">Disposed</option>
                         </select>
 
@@ -555,6 +647,9 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                             class="mt-1 line-clamp-1 max-w-xs text-xs text-neutral-500 dark:text-neutral-400"
                                         >
                                             {{ product.description }}
+                                        </p>
+                                        <p class="mt-1 text-[11px] text-neutral-400">
+                                            {{ product.source_system === 'supermarket_central' ? 'Central DB · ' + product.external_id : 'Manual entry' }}
                                         </p>
                                     </div>
                                 </td>
@@ -638,7 +733,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                         <button
                                             type="button"
                                             title="Apply Markdown Discount"
-                                            :disabled="product.status === 'donated' || product.status === 'disposed'"
+                                            :disabled="product.status === 'donated' || product.status === 'disposed' || product.status === 'sold_out'"
                                             class="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-500 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                                             @click="openDiscountModal(product)"
                                         >
@@ -653,6 +748,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                             :disabled="
                                                 product.status === 'donated' ||
                                                 product.status === 'disposed' ||
+                                                product.status === 'sold_out' ||
                                                 product.status === 'reserved_donation'
                                             "
                                             class="inline-flex items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-xs font-semibold text-purple-400 transition hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"

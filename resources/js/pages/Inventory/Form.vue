@@ -24,7 +24,7 @@ interface ProductFormData {
     expiration_date: string;
     batch_count?: number;
     stock_locked?: boolean;
-    status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed';
+    status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed' | 'sold_out';
 }
 
 const props = defineProps<{
@@ -279,6 +279,7 @@ const commonUnits = ['kg', 'pcs', 'liters', 'packs', 'boxes', 'bunches'];
                             <option value="discounted">Discounted (Promotional Clearance)</option>
                             <option value="reserved_donation">Reserved for Donation</option>
                             <option value="donated">Donated</option>
+                            <option value="sold_out">Sold Out</option>
                             <option value="disposed">Disposed / Composted</option>
                         </select>
                         <p v-if="form.errors.status" class="mt-1 text-xs text-red-500">

@@ -381,18 +381,26 @@ class InventoryService
         ]);
     }
 
-    private function refreshProductStockSummary(int $productId): void
+    public function refreshProductStockSummary(int $productId): void
     {
         $product = Product::query()->lockForUpdate()->findOrFail($productId);
         $availableBatches = $product->batches()->where('quantity_available', '>', 0)->get();
         $quantity = (int) $availableBatches->sum('quantity_available');
         $earliestExpiration = $availableBatches->min('expiration_date');
         $hasFullPriceStock = $availableBatches->contains(fn (ProductBatch $batch): bool => $batch->status !== 'discounted');
+        $quantitySold = (int) $product->batches()->sum('quantity_sold');
+        $quantityDonated = (int) $product->batches()->sum('quantity_donated');
+        $status = match (true) {
+            $quantity > 0 => $hasFullPriceStock ? 'active' : 'discounted',
+            $quantitySold > 0 => 'sold_out',
+            $quantityDonated > 0 => 'donated',
+            default => 'disposed',
+        };
 
         $product->update([
             'quantity' => $quantity,
             'expiration_date' => $earliestExpiration ?? $product->expiration_date,
-            'status' => $quantity === 0 ? 'donated' : ($hasFullPriceStock ? 'active' : 'discounted'),
+            'status' => $status,
         ]);
     }
 }

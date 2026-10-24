@@ -6,7 +6,9 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Models\Category;
 use App\Models\DonationPartner;
+use App\Models\InventorySyncSetting;
 use App\Models\Product;
+use App\Services\CentralInventorySyncService;
 use App\Services\InventoryService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -94,6 +96,8 @@ class ProductController extends Controller
 
                 return [
                     'id' => $product->id,
+                    'external_id' => $product->external_id,
+                    'source_system' => $product->source_system,
                     'sku' => $product->sku,
                     'name' => $product->name,
                     'description' => $product->description,
@@ -150,6 +154,11 @@ class ProductController extends Controller
             ],
             'categories' => $categories,
             'donation_partners' => $donationPartners,
+            'auto_sync' => InventorySyncSetting::query()->findOrFail(1)->only([
+                'auto_sync_enabled',
+                'last_synced_at',
+                'last_sync_summary',
+            ]),
             'stats' => [
                 'total_items' => $totalItems,
                 'critical_count' => $criticalCount,
@@ -331,5 +340,34 @@ class ProductController extends Controller
 
         return redirect()->back()
             ->with('success', "Product '{$product->name}' reserved for donation to {$partner->name}.");
+    }
+
+    public function toggleAutoSync(Request $request, CentralInventorySyncService $sync): RedirectResponse
+    {
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        $settings = $sync->setAutoSyncEnabled((bool) $validated['enabled']);
+        $message = $settings->auto_sync_enabled
+            ? 'Auto Sync enabled. Central inventory will update every 5 minutes while the scheduler is running.'
+            : 'Auto Sync paused. Manual product entry and Sync Now remain available.';
+
+        return redirect()->route('inventory.index')->with('success', $message);
+    }
+
+    public function syncNow(CentralInventorySyncService $sync): RedirectResponse
+    {
+        $result = $sync->synchronize(force: true);
+
+        return redirect()->route('inventory.index')->with(
+            'success',
+            sprintf(
+                'Central inventory sync completed: %d new products, %d units received, and %d units sold in the simulated POS.',
+                $result['new_products'],
+                $result['received_units'],
+                $result['sold_units']
+            )
+        );
     }
 }

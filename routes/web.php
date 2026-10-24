@@ -16,6 +16,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('inventory', [ProductController::class, 'index'])->name('inventory.index');
     Route::get('inventory/create', [ProductController::class, 'create'])->name('inventory.create');
     Route::post('inventory', [ProductController::class, 'store'])->name('inventory.store');
+    Route::post('inventory/auto-sync/toggle', [ProductController::class, 'toggleAutoSync'])->name('inventory.auto-sync.toggle');
+    Route::post('inventory/auto-sync/run', [ProductController::class, 'syncNow'])->name('inventory.auto-sync.run');
     Route::get('inventory/{product}/edit', [ProductController::class, 'edit'])->name('inventory.edit');
     Route::put('inventory/{product}', [ProductController::class, 'update'])->name('inventory.update');
     Route::delete('inventory/{product}', [ProductController::class, 'destroy'])->name('inventory.destroy');

@@ -21,6 +21,8 @@ interface InventoryBatch {
     discount_price: number | null;
     status: string;
     source: string;
+    store_code: string | null;
+    source_synced_at: string | null;
     expiration_date: string;
     days_remaining: number;
 }
@@ -167,7 +169,12 @@ function statusClass(status: string): string {
                         <tbody class="divide-y divide-sidebar-border/60">
                             <tr v-for="batch in batches" :key="batch.id" class="hover:bg-muted/20">
                                 <td class="px-5 py-3"><p class="font-medium text-foreground">{{ batch.name }}</p><p class="font-mono text-xs text-muted-foreground">{{ batch.sku }} · {{ batch.category }}</p></td>
-                                <td class="px-4 py-3 font-mono text-xs text-foreground">{{ batch.batch_code || '—' }}<p class="font-sans text-[11px] text-muted-foreground">{{ batch.source }}</p></td>
+                                <td class="px-4 py-3 font-mono text-xs text-foreground">
+                                    {{ batch.batch_code || '—' }}
+                                    <p class="font-sans text-[11px] text-muted-foreground">
+                                        {{ batch.source === 'central_sync' ? 'Supermarket POS · ' + batch.store_code : batch.source }}
+                                    </p>
+                                </td>
                                 <td class="px-4 py-3 text-foreground">{{ batch.quantity_received }} {{ batch.unit }}</td>
                                 <td class="px-4 py-3 font-semibold text-foreground">{{ batch.quantity_available }} {{ batch.unit }}</td>
                                 <td class="px-4 py-3 text-foreground">{{ batch.quantity_donated }} / {{ batch.quantity_sold }}</td>
