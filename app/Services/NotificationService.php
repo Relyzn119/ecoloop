@@ -18,10 +18,15 @@ use Throwable;
 class NotificationService
 {
     /** Queue donation alerts for the partner and all manager/cashier accounts. */
-    public function queueDonationAlerts(DonationPartner $partner, Product $product, ProductBatch $batch, string $reason): void
-    {
+    public function queueDonationAlerts(
+        DonationPartner $partner,
+        Product $product,
+        ProductBatch $batch,
+        string $reason,
+        bool $broadcastToActivePartners = false
+    ): void {
         $details = sprintf(
-            'Donation completed: %s (%s), batch %s, %d %s, expiry %s. Reason: %s',
+            "EcoLoop - Informasi Donasi\nProduk: %s (%s)\nBatch: %s\nJumlah: %d %s\nTanggal kedaluwarsa: %s\nAlasan donasi: %s\n\nProduk donasi sudah bisa diambil di supermarket. Pengambilan paling lambat 3 jam sebelum toko tutup. Silakan koordinasikan waktu dan titik pengambilan dengan pihak supermarket.",
             $product->name,
             $product->sku,
             $batch->batch_code,
@@ -30,33 +35,96 @@ class NotificationService
             $batch->expiration_date->toDateString(),
             $reason
         );
+        if ($broadcastToActivePartners) {
+            $details .= "\n\nPemberitahuan ini juga dibagikan kepada Donation Partner aktif lainnya. Mitra dipersilakan berkoordinasi dan berbagi produk sesuai kebutuhan bersama.";
+        }
 
-        $this->queueDelivery('donation_completed', 'email', $partner->email, 'EcoLoop food donation completed', [
-            'body' => "Hello {$partner->contact_person},\n\n{$details}\n\nEcoLoop Agent",
-            'product_id' => $product->id,
-        ], "donation:{$batch->id}:partner:email");
+        $managerDetails = $this->buildManagerDonationSummary();
 
-        if ($partner->telegram_chat_id) {
-            $this->queueDelivery('donation_completed', 'telegram', $partner->telegram_chat_id, null, [
-                'text' => $details,
-                'product_id' => $product->id,
-            ], "donation:{$batch->id}:partner:telegram");
+        $notificationPartners = $broadcastToActivePartners
+            ? DonationPartner::query()->active()->orderBy('id')->get()
+            : collect([$partner]);
+
+        foreach ($notificationPartners as $notificationPartner) {
+            $this->queueDelivery(
+                'donation_completed',
+                'email',
+                $notificationPartner->email,
+                'EcoLoop food donation completed',
+                [
+                    'body' => "Hello {$notificationPartner->contact_person},\n\n{$details}\n\nEcoLoop Agent",
+                    'product_id' => $product->id,
+                ],
+                "donation:{$batch->id}:partner:{$notificationPartner->id}:email"
+            );
+
+            if ($notificationPartner->telegram_chat_id) {
+                $this->queueDelivery('donation_completed', 'telegram', $notificationPartner->telegram_chat_id, null, [
+                    'text' => $details,
+                    'product_id' => $product->id,
+                ], "donation:{$batch->id}:partner:{$notificationPartner->id}:telegram");
+            }
         }
 
         $users = User::query()->notificationRecipients()->get(['id', 'name', 'email', 'telegram_chat_id']);
         foreach ($users as $user) {
             $this->queueDelivery('donation_completed', 'email', $user->email, 'EcoLoop donation completed', [
-                'body' => "Hello {$user->name},\n\n{$details}",
+                'body' => "Halo {$user->name},\n\n{$managerDetails}\n\nEcoLoop Agent",
                 'product_id' => $product->id,
             ], "donation:{$batch->id}:user:{$user->id}:email");
 
             if ($user->telegram_chat_id) {
                 $this->queueDelivery('donation_completed', 'telegram', $user->telegram_chat_id, null, [
-                    'text' => $details,
+                    'text' => $managerDetails,
                     'product_id' => $product->id,
                 ], "donation:{$batch->id}:user:{$user->id}:telegram");
             }
         }
+    }
+
+    /** Build a same-day summary for managers and cashiers in the Jakarta store timezone. */
+    private function buildManagerDonationSummary(): string
+    {
+        $storeNow = now('Asia/Jakarta');
+        $storageTimezone = (string) config('app.timezone', 'UTC');
+        $startOfStoreDay = $storeNow->copy()->startOfDay()->setTimezone($storageTimezone);
+        $endOfStoreDay = $storeNow->copy()->endOfDay()->setTimezone($storageTimezone);
+
+        $donations = AgentLog::query()
+            ->with('product:id,name,unit')
+            ->where('action_type', 'donation_requested')
+            ->where('status', 'success')
+            ->where('payload->event_type', 'donation_completed')
+            ->whereBetween('created_at', [$startOfStoreDay, $endOfStoreDay])
+            ->get(['id', 'product_id', 'payload']);
+
+        $products = [];
+        $totalsByUnit = [];
+        foreach ($donations as $donation) {
+            $payload = $donation->payload ?? [];
+            $name = $donation->product?->name ?? $payload['product_name'] ?? 'Produk';
+            $unit = $payload['unit'] ?? $donation->product?->unit ?? 'pcs';
+            $quantity = (int) ($payload['quantity_donated'] ?? $payload['quantity'] ?? 0);
+            $key = $name.'|'.$unit;
+
+            $products[$key] ??= ['name' => $name, 'unit' => $unit, 'quantity' => 0];
+            $products[$key]['quantity'] += $quantity;
+            $totalsByUnit[$unit] = ($totalsByUnit[$unit] ?? 0) + $quantity;
+        }
+
+        $productLines = collect($products)
+            ->map(fn (array $item): string => sprintf('• %s × %d %s', $item['name'], $item['quantity'], $item['unit']))
+            ->implode("\n");
+        $totalLines = collect($totalsByUnit)
+            ->map(fn (int $quantity, string $unit): string => sprintf('%d %s', $quantity, $unit))
+            ->implode(', ');
+
+        return sprintf(
+            "Rekap donasi hari ini (%s)\n%s\nTotal produk yang didonasikan hari ini: %s\n\nMohon staff segera menyiapkan dan mengemas (packing) produk yang akan didonasikan. Produk sudah dapat diambil di supermarket; pengambilan paling lambat 3 jam sebelum toko tutup. Koordinasikan waktu dan titik pengambilan dengan mitra.",
+            $storeNow->format('d-m-Y'),
+            $productLines !== '' ? $productLines : 'Belum ada produk tercatat.',
+            $totalLines !== '' ? $totalLines : '0 pcs'
+        );
     }
 
     /** Queue an approval request with Telegram buttons and a custom discount command. */

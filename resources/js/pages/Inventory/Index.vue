@@ -75,6 +75,10 @@ interface AutoSyncSummary {
     sales_transactions: number;
     sold_units: number;
     changed_products: number;
+    demo_new_products?: number;
+    demo_donated_products?: number;
+    demo_donated_units?: number;
+    demo_partner_count?: number;
 }
 
 interface AutoSyncState {
@@ -428,7 +432,7 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                         <span class="rounded-full bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">DEMO DATA</span>
                     </div>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                        Simulates central product receipts and POS sales every 5 minutes. Manual product entry remains available.
+                        Auto Sync simulates central product receipts and POS sales every 5 minutes. Sync Now updates demo data immediately and donates 3 products expiring within 2 days. Manual product entry remains available.
                     </p>
                     <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                         Last sync: {{ auto_sync.last_synced_at ? new Date(auto_sync.last_synced_at).toLocaleString() : 'Not synced yet' }}
@@ -436,6 +440,11 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                             · {{ auto_sync.last_sync_summary.new_products }} new products
                             · {{ auto_sync.last_sync_summary.received_units }} units received
                             · {{ auto_sync.last_sync_summary.sold_units }} units sold
+                            <template v-if="auto_sync.last_sync_summary.demo_donated_products !== undefined">
+                                · {{ auto_sync.last_sync_summary.demo_donated_products }} urgent products donated
+                                ({{ auto_sync.last_sync_summary.demo_donated_units }} units) across
+                                {{ auto_sync.last_sync_summary.demo_partner_count ?? 0 }} partners
+                            </template>
                         </template>
                     </p>
                 </div>

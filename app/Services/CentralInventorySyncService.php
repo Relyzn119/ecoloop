@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Category;
+use App\Models\DonationPartner;
 use App\Models\InventorySyncSetting;
 use App\Models\Product;
 use App\Models\ProductBatch;
@@ -184,6 +185,87 @@ class CentralInventorySyncService
         });
     }
 
+    /** Run an immediate demo sync and donate three urgent synthetic inventory batches. */
+    public function synchronizeForDemo(): array
+    {
+        $syncResult = $this->synchronize(force: true);
+        $partners = DonationPartner::query()->active()->orderBy('id')->get();
+
+        if ($partners->isEmpty()) {
+            return [
+                ...$syncResult,
+                'demo_donated_products' => 0,
+                'demo_donated_units' => 0,
+                'demo_partner_count' => 0,
+                'demo_expected_products' => 0,
+                'demo_donation_error' => 'No active donation partner is configured.',
+            ];
+        }
+
+        $demoBatchCount = max(3, $partners->count());
+        $catalog = collect(self::CATALOG);
+        $demoStock = DB::transaction(function () use ($catalog, $demoBatchCount): array {
+            $batches = [];
+            $newProducts = 0;
+            for ($index = 0; $index < $demoBatchCount; $index++) {
+                $item = $catalog[$index % $catalog->count()];
+                $product = Product::query()->where('external_id', $item['external_id'])->first();
+                if (! $product) {
+                    $product = $this->createCentralProduct($item);
+                    $newProducts++;
+                }
+
+                $batches[] = $this->receiveCentralBatch(
+                    $product,
+                    random_int(4, 12),
+                    $index % 3 === 1 ? 2 : 1
+                );
+            }
+
+            return ['batches' => $batches, 'new_products' => $newProducts];
+        });
+
+        $inventoryService = app(InventoryService::class);
+        $donations = [];
+        foreach ($demoStock['batches'] as $index => $batch) {
+            $partner = $partners[$index % $partners->count()];
+            $donations[] = [
+                ...$inventoryService->donateCentralDemoBatch($batch->id, $partner->id),
+                'partner_id' => $partner->id,
+            ];
+        }
+
+        $successfulDonations = collect($donations)->where('success', true);
+        $donationPartnerCount = $successfulDonations->pluck('partner_id')->unique()->count();
+        $summary = [
+            'new_products' => (int) ($syncResult['new_products'] ?? 0),
+            'new_batches' => (int) ($syncResult['new_batches'] ?? 0),
+            'received_units' => (int) ($syncResult['received_units'] ?? 0),
+            'sales_transactions' => (int) ($syncResult['sales_transactions'] ?? 0),
+            'sold_units' => (int) ($syncResult['sold_units'] ?? 0),
+            'changed_products' => (int) ($syncResult['changed_products'] ?? 0),
+            'demo_new_products' => $demoStock['new_products'],
+            'demo_donated_products' => $successfulDonations->count(),
+            'demo_donated_units' => (int) $successfulDonations->sum('quantity'),
+            'demo_partner_count' => $donationPartnerCount,
+            'demo_expected_products' => $demoBatchCount,
+        ];
+
+        InventorySyncSetting::query()->findOrFail(1)->update(['last_sync_summary' => $summary]);
+
+        return [
+            ...$syncResult,
+            'demo_donated_products' => $successfulDonations->count(),
+            'demo_donated_units' => (int) $successfulDonations->sum('quantity'),
+            'demo_partner_count' => $donationPartnerCount,
+            'demo_expected_products' => $demoBatchCount,
+            'demo_donation_error' => $successfulDonations->count() < $demoBatchCount
+                || $donationPartnerCount < $partners->count()
+                ? 'Not all demo donation batches could be donated to active partners. Check partner and batch availability.'
+                : null,
+        ];
+    }
+
     /**
      * @param  array{
      *     external_id: string,
@@ -216,18 +298,18 @@ class CentralInventorySyncService
         ]);
     }
 
-    private function receiveCentralBatch(Product $product, int $quantity): void
+    private function receiveCentralBatch(Product $product, int $quantity, ?int $daysUntilExpiry = null): ProductBatch
     {
         $storeCode = ['JKT-01', 'BDG-02', 'SBY-01', 'DPS-01'][array_rand(['JKT-01', 'BDG-02', 'SBY-01', 'DPS-01'])];
         $batchReference = (string) Str::uuid();
 
-        $product->batches()->create([
+        return $product->batches()->create([
             'batch_code' => $storeCode.'-'.$product->sku.'-'.now()->format('ymd').'-'.Str::upper(Str::random(4)),
             'quantity_received' => $quantity,
             'quantity_available' => $quantity,
             'quantity_donated' => 0,
             'quantity_sold' => 0,
-            'expiration_date' => now()->addDays(random_int(8, 60))->toDateString(),
+            'expiration_date' => now()->addDays($daysUntilExpiry ?? random_int(8, 60))->toDateString(),
             'original_price' => $product->original_price,
             'discount_price' => null,
             'status' => 'active',

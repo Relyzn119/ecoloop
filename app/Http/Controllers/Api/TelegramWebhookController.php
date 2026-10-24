@@ -70,8 +70,11 @@ class TelegramWebhookController extends Controller
                 $chatId = (string) $message['chat']['id'];
                 $text = trim($message['text']);
 
-                if (in_array($text, ['/start', '/id'], true)) {
-                    $telegram->sendMessage($chatId, "EcoLoop bot connected. Your Telegram chat ID is {$chatId}. Enter this ID in your EcoLoop profile settings.");
+                if (preg_match('/^\/(?:start|id)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
+                    $telegram->sendMessage(
+                        $chatId,
+                        "EcoLoop bot connected. Your Telegram chat ID is {$chatId}. Copy this ID into the Telegram Chat ID field for this partner under Donation Partners in EcoLoop. Each partner needs the chat ID from its own Telegram account or group."
+                    );
 
                     return response()->json(['ok' => true]);
                 }
@@ -85,7 +88,11 @@ class TelegramWebhookController extends Controller
                 }
             }
         } catch (Throwable $exception) {
-            Log::warning('Telegram update could not be processed.', ['exception' => $exception::class]);
+            Log::warning('Telegram update could not be processed.', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+                'update_type' => isset($update['callback_query']) ? 'callback_query' : 'message',
+            ]);
             if (isset($update['callback_query']['id'])) {
                 $telegram->answerCallback((string) $update['callback_query']['id'], 'Could not process. Check role and pending status.');
             } elseif ($chatId !== null && isset($update['message'])) {

@@ -256,6 +256,86 @@ class InventoryService
         ];
     }
 
+    /** Automatically donate an urgent synthetic central-stock batch for a manual demo sync. */
+    public function donateCentralDemoBatch(int $batchId, int $partnerId): array
+    {
+        $reason = 'Demo Sync Now: synthetic supermarket stock expiring within two days was donated automatically.';
+        $donation = DB::transaction(function () use ($batchId, $partnerId, $reason): ?array {
+            $batch = ProductBatch::query()->lockForUpdate()->findOrFail($batchId);
+            $product = Product::query()->with('category')->findOrFail($batch->product_id);
+            $partner = DonationPartner::query()->active()->findOrFail($partnerId);
+
+            if ($batch->source !== 'central_sync'
+                || $batch->quantity_available < 1
+                || ! in_array($batch->status, ['active', 'discounted'], true)
+                || $batch->expiration_date->lt(now()->startOfDay())
+                || $batch->expiration_date->gt(now()->addDays(2)->endOfDay())) {
+                return null;
+            }
+
+            $quantity = $batch->quantity_available;
+            $batch->update([
+                'quantity_available' => 0,
+                'quantity_donated' => $batch->quantity_donated + $quantity,
+                'status' => 'donated',
+            ]);
+
+            AgentLog::query()->create([
+                'product_id' => $product->id,
+                'partner_id' => $partner->id,
+                'action_type' => 'donation_requested',
+                'reasoning' => $reason,
+                'payload' => [
+                    'event_type' => 'donation_completed',
+                    'source' => 'demo_sync_now',
+                    'batch_id' => $batch->id,
+                    'batch_code' => $batch->batch_code,
+                    'quantity_donated' => $quantity,
+                    'unit' => $product->unit,
+                    'partner_id' => $partner->id,
+                ],
+                'status' => 'success',
+            ]);
+
+            $this->refreshProductStockSummary($product->id);
+
+            return [
+                'partner' => $partner,
+                'product' => $product->fresh(),
+                'batch' => $batch->fresh(),
+                'quantity' => $quantity,
+                'reason' => $reason,
+            ];
+        });
+
+        if ($donation === null) {
+            return ['success' => false, 'quantity' => 0];
+        }
+
+        try {
+            $this->notificationService->queueDonationAlerts(
+                $donation['partner'],
+                $donation['product'],
+                $donation['batch'],
+                $donation['reason'],
+                broadcastToActivePartners: true
+            );
+        } catch (Throwable $exception) {
+            Log::error('Demo donation succeeded but notification queueing failed.', [
+                'batch_id' => $donation['batch']->id,
+                'partner_id' => $donation['partner']->id,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        return [
+            'success' => true,
+            'quantity' => $donation['quantity'],
+            'product_name' => $donation['product']->name,
+            'batch_id' => $donation['batch']->id,
+        ];
+    }
+
     /**
      * Evaluate expiring inventory with the configured AI provider and execute
      * the resulting inventory actions.

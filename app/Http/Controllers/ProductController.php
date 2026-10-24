@@ -358,15 +358,31 @@ class ProductController extends Controller
 
     public function syncNow(CentralInventorySyncService $sync): RedirectResponse
     {
-        $result = $sync->synchronize(force: true);
+        $result = $sync->synchronizeForDemo();
+
+        if (($result['demo_donation_error'] ?? null) !== null) {
+            return redirect()->route('inventory.index')->with(
+                'error',
+                sprintf(
+                    'Demo sync updated central inventory, but only %d of %d urgent products were donated across %d active partners. %s',
+                    $result['demo_donated_products'],
+                    $result['demo_expected_products'],
+                    $result['demo_partner_count'],
+                    $result['demo_donation_error']
+                )
+            );
+        }
 
         return redirect()->route('inventory.index')->with(
             'success',
             sprintf(
-                'Central inventory sync completed: %d new products, %d units received, and %d units sold in the simulated POS.',
+                'Sync Now completed: %d new products, %d units received, and %d units sold. %d urgent products expiring within 2 days were donated (%d units) across %d active partners; partner notifications were queued.',
                 $result['new_products'],
                 $result['received_units'],
-                $result['sold_units']
+                $result['sold_units'],
+                $result['demo_donated_products'],
+                $result['demo_donated_units'],
+                $result['demo_partner_count']
             )
         );
     }
