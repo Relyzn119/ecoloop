@@ -31,7 +31,7 @@ const submit = () => {
         <Head title="Daftar Mitra Donasi" />
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">
-            <div class="grid gap-6">
+            <div class="auth-register-grid grid gap-5 sm:grid-cols-2">
                 <div class="grid gap-2">
                     <Label for="organization_name">Nama organisasi / mitra</Label
                     ><Input id="organization_name" required v-model="form.organization_name" placeholder="Contoh: Bank Pangan Sejahtera" /><InputError
@@ -59,7 +59,7 @@ const submit = () => {
                         required
                         v-model="form.address"
                         rows="3"
-                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        class="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
                         placeholder="Alamat untuk pengambilan donasi"
                     /><InputError :message="form.errors.address" />
                 </div>
@@ -117,3 +117,4 @@ const submit = () => {
         </form>
     </AuthBase>
 </template>
+

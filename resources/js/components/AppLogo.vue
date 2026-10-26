@@ -1,19 +1,12 @@
 <script setup lang="ts">
-import AppLogoIcon from '@/components/AppLogoIcon.vue';
-
-interface Props {
-    class?: string;
-}
-
+interface Props { class?: string }
 defineProps<Props>();
 </script>
 
 <template>
-    <div class="flex aspect-square size-8 items-center justify-center rounded-md bg-emerald-600 text-white">
-        <AppLogoIcon class="size-5 fill-current" />
-    </div>
-    <div class="ml-1 grid flex-1 text-left text-sm">
-        <span class="mb-0.5 truncate font-semibold leading-none">EcoLoop Agent</span>
-        <span class="truncate text-xs text-muted-foreground">Circular Economy Platform</span>
-    </div>
+    <span class="flex min-w-0 flex-1 items-center gap-2.5">
+        <img src="/images/ecoloop-mark.png" alt="EcoLoop" class="hidden size-8 shrink-0 object-contain group-data-[collapsible=icon]:block" />
+        <img src="/images/ecoloop-logo-light.png" alt="EcoLoop" class="h-8 w-auto max-w-[145px] object-contain dark:hidden group-data-[collapsible=icon]:hidden" />
+        <img src="/images/ecoloop-logo-dark.png" alt="EcoLoop" class="hidden h-8 w-auto max-w-[145px] object-contain dark:block group-data-[collapsible=icon]:hidden" />
+    </span>
 </template>
