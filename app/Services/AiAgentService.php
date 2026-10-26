@@ -15,6 +15,129 @@ use Throwable;
 class AiAgentService
 {
     /**
+     * Identify a product from an eligible inventory catalog and screen its visible condition.
+     *
+     * @param  Collection<int, ProductBatch>  $batches
+     * @return array{matched_product_id: int|null, donation_eligible: bool, confidence: float, condition: string, reasoning: string, safety_note: string, provider: string}
+     */
+    public function identifyAndEvaluateDonationPhoto(Collection $batches, string $imageData, string $mimeType, bool $partnerMode = false): array
+    {
+        $manualReview = [
+            'matched_product_id' => null,
+            'donation_eligible' => false,
+            'confidence' => 0.0,
+            'condition' => 'unclear',
+            'reasoning' => 'Produk tidak dapat dikenali dengan yakin. Periksa stok secara manual atau coba foto ulang.',
+            'safety_note' => 'Foto tidak dapat memastikan keamanan mikrobiologis, bau, suhu penyimpanan, maupun kontaminasi makanan.',
+            'provider' => 'manual_review',
+        ];
+
+        if (! $this->hasNineRouterKey() || $batches->isEmpty()) {
+            return $manualReview;
+        }
+
+        $products = $batches->unique('product_id')->map(fn (ProductBatch $batch): Product => $batch->product)->values();
+        $catalog = $products->map(fn (Product $product): array => [
+            'candidate_id' => (string) $product->id,
+            'sku' => (string) $product->sku,
+            'name' => (string) $product->name,
+            'category' => (string) ($product->category?->name ?? 'General'),
+        ])->all();
+        $candidateMap = $products->keyBy(fn (Product $product): string => (string) $product->id);
+        $catalogJson = json_encode($catalog, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        $partnerRule = $partnerMode
+            ? 'good dan acceptable boleh donation_eligible=true bila confidence minimal 0.75; good berarti produk masih layak konsumsi, acceptable berarti tidak layak jual tetapi masih tampak layak konsumsi.'
+            : 'Hanya acceptable boleh donation_eligible=true bila confidence minimal 0.75; good (masih layak dijual), poor, dan unclear wajib false.';
+
+        $prompt = <<<PROMPT
+Kenali produk pada foto dengan memilih TEPAT SATU candidate_id dari katalog stok berikut. Jangan membuat kandidat atau ID baru.
+[KATALOG STOK]
+{$catalogJson}
+
+Setelah mengenali produk, nilai kondisi visualnya:
+- good: tampak layak konsumsi dan masih layak dijual.
+- acceptable: tampak tidak layak dijual karena kematangan/cacat tampilan ringan, tetapi masih berpotensi layak konsumsi.
+- poor: tampak busuk, berjamur, rusak berat, atau ada tanda tidak layak konsumsi.
+- unclear: objek/jenis/kondisi tidak terlihat jelas atau kandidat tidak cocok.
+Aturan donation_eligible: {$partnerRule}
+Jika tidak dapat mencocokkan foto ke kandidat tertentu dengan yakin, candidate_id=null, condition=unclear, donation_eligible=false.
+Jangan memilih acceptable hanya karena tanggal kedaluwarsa dekat. Foto tidak membuktikan keamanan makanan. Jika ragu, minta pemeriksaan manual.
+Kembalikan HANYA JSON valid dengan candidate_id (string atau null), donation_eligible (boolean), confidence (angka 0 sampai 1), condition (good|acceptable|poor|unclear), reasoning (Bahasa Indonesia), safety_note (Bahasa Indonesia).
+PROMPT;
+
+        try {
+            $model = (string) config('services.ninerouter.vision_model');
+            $baseUrl = rtrim((string) config('services.ninerouter.base_url', 'http://127.0.0.1:20128/v1'), '/');
+            $response = Http::timeout(45)
+                ->withToken((string) config('services.ninerouter.api_key'))
+                ->acceptJson()
+                ->post($baseUrl.'/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        ['role' => 'system', 'content' => 'You are a cautious visual food identification and condition screening assistant. Select only an exact candidate from the supplied catalog. Never claim food is certainly safe. Return strict JSON only.'],
+                        ['role' => 'user', 'content' => [
+                            ['type' => 'text', 'text' => $prompt],
+                            ['type' => 'image_url', 'image_url' => ['url' => 'data:'.$mimeType.';base64,'.$imageData, 'detail' => 'low']],
+                        ]],
+                    ],
+                    'response_format' => ['type' => 'json_object'],
+                    'temperature' => 0.1,
+                    'stream' => false,
+                ]);
+
+            if (! $response->successful()) {
+                Log::warning('9Router inventory photo identification returned an error.', ['status' => $response->status()]);
+
+                return $manualReview;
+            }
+
+            $rawText = $response->json('choices.0.message.content');
+            if (! is_string($rawText) || trim($rawText) === '') {
+                return $manualReview;
+            }
+
+            $rawText = trim(preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($rawText)) ?? '');
+            $decision = json_decode($rawText, true, 512, JSON_THROW_ON_ERROR);
+            if (! is_array($decision)) {
+                return $manualReview;
+            }
+
+            $candidateId = is_string($decision['candidate_id'] ?? null) ? $decision['candidate_id'] : '';
+            if (! $candidateMap->has($candidateId)) {
+                return [
+                    ...$manualReview,
+                    'reasoning' => is_string($decision['reasoning'] ?? null) ? trim($decision['reasoning']) : $manualReview['reasoning'],
+                    'provider' => '9router:'.$model,
+                ];
+            }
+
+            $confidence = is_numeric($decision['confidence'] ?? null)
+                ? max(0.0, min(1.0, (float) $decision['confidence']))
+                : 0.0;
+            $condition = in_array($decision['condition'] ?? null, ['good', 'acceptable', 'poor', 'unclear'], true)
+                ? $decision['condition']
+                : 'unclear';
+            $allowedConditions = $partnerMode ? ['good', 'acceptable'] : ['acceptable'];
+            $eligible = $confidence >= 0.75
+                && in_array($condition, $allowedConditions, true);
+
+            return [
+                'matched_product_id' => (int) $candidateId,
+                'donation_eligible' => $eligible,
+                'confidence' => $confidence,
+                'condition' => $condition,
+                'reasoning' => is_string($decision['reasoning'] ?? null) ? trim($decision['reasoning']) : $manualReview['reasoning'],
+                'safety_note' => is_string($decision['safety_note'] ?? null) ? trim($decision['safety_note']) : $manualReview['safety_note'],
+                'provider' => '9router:'.$model,
+            ];
+        } catch (Throwable $exception) {
+            Log::warning('9Router inventory photo identification failed.', ['error' => $exception->getMessage()]);
+
+            return $manualReview;
+        }
+    }
+
+    /**
      * Evaluate visible food condition from a user-provided image.
      *
      * @return array{donation_eligible: bool, confidence: float, condition: string, reasoning: string, safety_note: string, provider: string}

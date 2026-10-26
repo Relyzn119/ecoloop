@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2, Clock, Edit3, Handshake, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Edit3, Handshake, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface CategoryItem {
@@ -42,6 +42,30 @@ interface ProductItem {
     urgency: 'critical' | 'warning' | 'safe' | 'expired';
     status: 'active' | 'discounted' | 'reserved_donation' | 'donated' | 'disposed' | 'sold_out';
     created_at?: string;
+    received_quantity: number;
+    donated_quantity: number;
+    sold_quantity: number;
+    batches: ProductBatchItem[];
+}
+
+interface ProductBatchItem {
+    id: number;
+    batch_code: string;
+    source: string;
+    received_at: string | null;
+    quantity_received: number;
+    quantity_available: number;
+    quantity_donated: number;
+    quantity_sold: number;
+    expiration_date: string;
+    days_remaining: number;
+    status: string;
+    discount_price: number | null;
+    discount_approval: {
+        status: string;
+        recommended_percentage: number;
+        approved_percentage: number | null;
+    } | null;
 }
 
 interface PaginationLink {
@@ -115,6 +139,7 @@ const flashSuccess = computed(() => (page.props as any).flash?.success);
 const flashError = computed(() => (page.props as any).flash?.error);
 const isSyncing = ref(false);
 const isTogglingAutoSync = ref(false);
+const expandedProductIds = ref<number[]>([]);
 
 const runAutoSyncNow = () => {
     isSyncing.value = true;
@@ -368,6 +393,41 @@ const formatStatusLabel = (status: ProductItem['status']) => {
             return status;
     }
 };
+
+const toggleProductBatches = (productId: number) => {
+    expandedProductIds.value = expandedProductIds.value.includes(productId)
+        ? expandedProductIds.value.filter((id) => id !== productId)
+        : [...expandedProductIds.value, productId];
+};
+
+const isProductExpanded = (productId: number) => expandedProductIds.value.includes(productId);
+
+const getBatchStatusLabel = (batch: ProductBatchItem) => {
+    if (batch.status === 'donated') return 'Donated';
+    if (batch.discount_approval?.status === 'pending') {
+        return `Awaiting discount approval · ${batch.discount_approval.recommended_percentage}%`;
+    }
+    if (batch.discount_approval?.status === 'rejected') return 'Discount rejected · regular price';
+    if (batch.status === 'discounted') {
+        return `Discounted${batch.discount_approval?.approved_percentage ? ` · ${batch.discount_approval.approved_percentage}%` : ''}`;
+    }
+    if (batch.status === 'sold_out') return 'Sold out';
+    if (batch.status === 'disposed') return 'Disposed';
+
+    return 'Active stock';
+};
+
+const getBatchStatusClasses = (batch: ProductBatchItem) => {
+    if (batch.status === 'donated') return 'border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300';
+    if (batch.discount_approval?.status === 'pending') return 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-300';
+    if (batch.status === 'discounted') return 'border-orange-500/20 bg-orange-500/10 text-orange-600 dark:text-orange-300';
+    if (batch.status === 'sold_out' || batch.status === 'disposed') return 'border-neutral-500/20 bg-neutral-500/10 text-neutral-500';
+
+    return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300';
+};
+
+const formatReceivedAt = (date: string | null) => (date ? new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(new Date(date)) : 'Unknown date');
+const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 </script>
 
 <template>
@@ -644,12 +704,17 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                             >
                                                 {{ product.sku }}
                                             </span>
-                                            <Link
-                                                :href="`/inventory/${product.id}/edit`"
-                                                class="font-semibold text-neutral-900 hover:text-emerald-600 dark:text-neutral-100 dark:hover:text-emerald-400"
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 text-left font-semibold text-neutral-900 hover:text-emerald-600 dark:text-neutral-100 dark:hover:text-emerald-400"
+                                                :aria-expanded="isProductExpanded(product.id)"
+                                                :aria-label="`${isProductExpanded(product.id) ? 'Hide' : 'Show'} stock batches for ${product.name}`"
+                                                @click="toggleProductBatches(product.id)"
                                             >
+                                                <ChevronDown v-if="isProductExpanded(product.id)" class="size-4 shrink-0" />
+                                                <ChevronRight v-else class="size-4 shrink-0" />
                                                 {{ product.name }}
-                                            </Link>
+                                            </button>
                                         </div>
                                         <p
                                             v-if="product.description"
@@ -674,6 +739,9 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                 <td class="whitespace-nowrap px-4 py-4">
                                     <span class="font-semibold text-neutral-900 dark:text-neutral-100">{{ product.quantity }}</span>
                                     <span class="ml-1 text-xs text-neutral-500 dark:text-neutral-400">{{ product.unit }}</span>
+                                    <p class="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                                        {{ product.received_quantity }} {{ product.unit }} received · {{ product.donated_quantity }} {{ product.unit }} donated
+                                    </p>
                                 </td>
 
                                 <!-- Price (with discount tag if active) -->
@@ -786,6 +854,80 @@ const formatStatusLabel = (status: ProductItem['status']) => {
                                             <Trash2 class="size-3.5" />
                                         </button>
                                     </div>
+                                </td>
+                            </tr>
+
+                            <tr v-if="isProductExpanded(product.id)" :key="`batches-${product.id}`" class="bg-neutral-50/70 dark:bg-neutral-800/30">
+                                <td colspan="7" class="px-4 py-4 sm:px-6">
+                                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <h3 class="text-sm font-semibold text-neutral-900 dark:text-neutral-100">Stock batches · {{ product.name }}</h3>
+                                            <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                                {{ product.batches.length }} receipts · {{ product.received_quantity }} {{ product.unit }} received ·
+                                                {{ product.quantity }} {{ product.unit }} currently available ·
+                                                {{ product.donated_quantity }} {{ product.unit }} donated · {{ product.sold_quantity }} {{ product.unit }} sold
+                                            </p>
+                                        </div>
+                                        <Link
+                                            :href="`/inventory/${product.id}/edit`"
+                                            class="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                                        >
+                                            Edit product
+                                        </Link>
+                                    </div>
+                                    <div class="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-700">
+                                        <table class="w-full min-w-[760px] text-left text-xs">
+                                            <thead class="bg-white text-neutral-500 dark:bg-neutral-900 dark:text-neutral-400">
+                                                <tr>
+                                                    <th class="px-3 py-2.5">Batch / received</th>
+                                                    <th class="px-3 py-2.5">Received</th>
+                                                    <th class="px-3 py-2.5">Available</th>
+                                                    <th class="px-3 py-2.5">Donated / sold</th>
+                                                    <th class="px-3 py-2.5">Expires</th>
+                                                    <th class="px-3 py-2.5">Batch status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-neutral-200 dark:divide-neutral-800">
+                                                <tr v-for="batch in product.batches" :key="batch.id" class="bg-white dark:bg-neutral-900">
+                                                    <td class="px-3 py-3">
+                                                        <p class="font-mono font-medium text-neutral-800 dark:text-neutral-200">{{ batch.batch_code }}</p>
+                                                        <p class="mt-1 text-neutral-500 dark:text-neutral-400">
+                                                            Received {{ formatReceivedAt(batch.received_at) }} · {{ batch.source.replaceAll('_', ' ') }}
+                                                        </p>
+                                                    </td>
+                                                    <td class="px-3 py-3 font-medium text-neutral-800 dark:text-neutral-200">
+                                                        {{ batch.quantity_received }} {{ product.unit }}
+                                                    </td>
+                                                    <td class="px-3 py-3 font-medium text-neutral-800 dark:text-neutral-200">
+                                                        {{ batch.quantity_available }} {{ product.unit }}
+                                                    </td>
+                                                    <td class="px-3 py-3 text-neutral-600 dark:text-neutral-300">
+                                                        {{ batch.quantity_donated }} / {{ batch.quantity_sold }} {{ product.unit }}
+                                                    </td>
+                                                    <td class="px-3 py-3">
+                                                        <p class="font-medium text-neutral-800 dark:text-neutral-200">{{ batch.expiration_date }}</p>
+                                                        <p :class="batch.days_remaining <= 2 ? 'mt-1 font-semibold text-rose-600' : 'mt-1 text-neutral-500 dark:text-neutral-400'">
+                                                            {{ batch.days_remaining < 0 ? `Expired ${Math.abs(batch.days_remaining)}d ago` : `${batch.days_remaining}d remaining` }}
+                                                        </p>
+                                                    </td>
+                                                    <td class="px-3 py-3">
+                                                        <span class="inline-flex rounded-full border px-2.5 py-1 font-medium" :class="getBatchStatusClasses(batch)">
+                                                            {{ getBatchStatusLabel(batch) }}
+                                                        </span>
+                                                        <p v-if="batch.discount_price !== null" class="mt-1 text-neutral-500 dark:text-neutral-400">
+                                                            {{ formatCurrency(batch.discount_price) }} per unit
+                                                        </p>
+                                                    </td>
+                                                </tr>
+                                                <tr v-if="product.batches.length === 0">
+                                                    <td colspan="6" class="px-3 py-6 text-center text-neutral-500">No receipt batches recorded for this product.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p class="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
+                                        Stock with 0–2 days remaining is donated automatically; batches with 3–7 days remaining may appear here as awaiting discount approval.
+                                    </p>
                                 </td>
                             </tr>
 

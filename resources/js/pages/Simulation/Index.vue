@@ -38,7 +38,6 @@ interface InventoryBatch {
     source_synced_at: string | null;
     expiration_date: string;
     days_remaining: number;
-    partner_review_ready_at?: string | null;
 }
 
 interface DiscountApprovalItem {
@@ -64,16 +63,6 @@ interface AgentLogItem {
     partner?: { id: number | null; name: string } | null;
 }
 
-interface DonationBatchOption {
-    id: number;
-    name: string;
-    sku: string;
-    batch_code: string | null;
-    quantity_available: number;
-    unit: string;
-    expiration_date: string;
-}
-
 interface DonationPartnerOption {
     id: number;
     name: string;
@@ -87,12 +76,14 @@ interface VisionResult {
     reasoning: string;
     safety_note: string;
     provider: string;
-    batch_id: number;
-    product_name: string;
+    batch_id: number | null;
+    product_name: string | null;
     batch_code: string | null;
-    quantity_available: number;
-    unit: string;
+    quantity_available: number | null;
+    unit: string | null;
     review_token: string | null;
+    donation_completed?: boolean;
+    donation_message?: string | null;
 }
 
 const props = defineProps<{
@@ -100,7 +91,6 @@ const props = defineProps<{
     pendingApprovals: DiscountApprovalItem[];
     recentLogs: AgentLogItem[];
     lastUpdatedAt: string;
-    donationBatches: DonationBatchOption[];
     donationPartners: DonationPartnerOption[];
     visionResult: VisionResult | null;
     portalMode?: 'staff' | 'partner';
@@ -117,7 +107,6 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() =>
 );
 
 const isRefreshing = ref(false);
-const selectedBatchId = ref<number | null>(null);
 const selectedPartnerId = ref<number | null>(props.donationPartners[0]?.id ?? null);
 const selectedPhoto = ref<File | null>(null);
 const photoPreviewUrl = ref<string | null>(null);
@@ -129,7 +118,7 @@ const cameraActive = ref(false);
 const cameraError = ref('');
 let cameraStream: MediaStream | null = null;
 let currentPreviewUrl: string | null = null;
-const analysisForm = useForm<{ batch_id: number | null; photo: File | null }>({ batch_id: null, photo: null });
+const analysisForm = useForm<{ photo: File | null }>({ photo: null });
 const donationForm = useForm<{ review_token: string; partner_id: number | null }>({ review_token: '', partner_id: selectedPartnerId.value });
 const selectedDonationPartner = computed(() => props.donationPartners.find((partner) => partner.id === selectedPartnerId.value) ?? null);
 const availableUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_available, 0));
@@ -145,7 +134,7 @@ onBeforeUnmount(() => {
 
 function refreshData(): void {
     router.reload({
-        only: ['batches', 'donationBatches', 'donationPartners', 'pendingApprovals', 'recentLogs', 'lastUpdatedAt'],
+        only: ['batches', 'donationPartners', 'pendingApprovals', 'recentLogs', 'lastUpdatedAt'],
         onStart: () => {
             isRefreshing.value = true;
         },
@@ -236,10 +225,9 @@ function captureCameraPhoto(): void {
 }
 
 function analyzePhoto(): void {
-    if (!selectedBatchId.value || !selectedPhoto.value) return;
+    if (!selectedPhoto.value) return;
     visionResult.value = null;
     donationNotice.value = '';
-    analysisForm.batch_id = selectedBatchId.value;
     analysisForm.photo = selectedPhoto.value;
     analysisForm.post(route(isPartnerPortal.value ? 'partner.scan.analyze' : 'simulation.vision.analyze'), {
         forceFormData: true,
@@ -256,7 +244,7 @@ function donateReviewedPhoto(): void {
     donationNotice.value = '';
     donationForm.review_token = visionResult.value.review_token;
     donationForm.partner_id = isPartnerPortal.value ? null : selectedPartnerId.value;
-    donationForm.post(route(isPartnerPortal.value ? 'partner.scan.donate' : 'simulation.vision.donate'), {
+    donationForm.post(route('simulation.vision.donate'), {
         preserveScroll: true,
         onSuccess: (page) => {
             const pageProps = page.props as unknown as { flash?: { success?: string; error?: string } };
@@ -360,23 +348,9 @@ function donateReviewedPhoto(): void {
                 </div>
                 <div class="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)]">
                     <div class="space-y-4">
-                        <label class="block space-y-1.5 text-sm font-medium text-foreground">
-                            <span>Inventory lot</span>
-                            <select
-                                v-model.number="selectedBatchId"
-                                class="w-full rounded-lg border-input bg-background text-sm"
-                                :disabled="analysisForm.processing || donationBatches.length === 0"
-                            >
-                                <option :value="null" disabled>Select product and batch</option>
-                                <option v-for="batch in donationBatches" :key="batch.id" :value="batch.id">
-                                    {{ batch.name }} · {{ batch.batch_code || 'Batch' }} · {{ batch.quantity_available }} {{ batch.unit }}
-                                </option>
-                            </select>
-                            <span v-if="analysisForm.errors.batch_id" class="block text-xs text-red-600">{{ analysisForm.errors.batch_id }}</span>
-                            <span v-if="donationBatches.length === 0" class="block text-xs text-muted-foreground"
-                                >There are no available batches to review.</span
-                            >
-                        </label>
+                        <p class="text-sm text-muted-foreground">
+                            Ambil atau unggah foto produk. AI akan mencocokkannya dengan stok yang tersedia dan memilih batch yang paling dekat tanggal kedaluwarsanya.
+                        </p>
                         <div class="flex flex-wrap gap-2">
                             <input
                                 ref="photoInput"
@@ -405,7 +379,7 @@ function donateReviewedPhoto(): void {
                             <button
                                 type="button"
                                 class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                :disabled="!selectedBatchId || !selectedPhoto || analysisForm.processing || donationBatches.length === 0"
+                                :disabled="!selectedPhoto || analysisForm.processing"
                                 @click="analyzePhoto"
                             >
                                 <RefreshCw class="size-4" :class="{ 'animate-spin': analysisForm.processing }" />{{
@@ -473,17 +447,27 @@ function donateReviewedPhoto(): void {
                                 <div>
                                     <p class="font-semibold text-foreground">
                                         {{
-                                            visionResult.donation_eligible
+                                            !visionResult.product_name
+                                                ? 'Produk tidak cocok dengan stok yang tersedia — tidak ada stok berubah'
+                                                : visionResult.donation_eligible && isPartnerPortal
+                                                  ? visionResult.donation_completed
+                                                      ? 'Layak konsumsi — donasi langsung berhasil'
+                                                      : 'Layak konsumsi — donasi belum berhasil diproses'
+                                                  : visionResult.donation_eligible
                                                 ? 'Not suitable for sale; potentially suitable for donation'
                                                 : visionResult.condition === 'good'
-                                                  ? 'Still suitable for sale — donation is disabled'
+                                                  ? isPartnerPortal
+                                                      ? 'Masih layak konsumsi — donasi dapat dilanjutkan'
+                                                      : 'Still suitable for sale — donation is disabled'
                                                   : visionResult.condition === 'poor'
                                                     ? 'Possible spoilage or unsafe condition — do not donate'
                                                     : 'Unclear — inspect manually or take another photo'
                                         }}
                                     </p>
                                     <p class="text-xs text-muted-foreground">
-                                        {{ visionResult.product_name }} · {{ visionResult.batch_code || 'Batch' }} ·
+                                        <template v-if="visionResult.product_name">
+                                            {{ visionResult.product_name }} · {{ visionResult.batch_code || 'Batch' }} ·
+                                        </template>
                                         {{ Math.round(visionResult.confidence * 100) }}% visual confidence
                                     </p>
                                 </div>
@@ -491,7 +475,7 @@ function donateReviewedPhoto(): void {
                             <p class="text-sm text-foreground">{{ visionResult.reasoning }}</p>
                             <p class="text-xs leading-relaxed text-muted-foreground">{{ visionResult.safety_note }}</p>
                             <div
-                                v-if="visionResult.donation_eligible && visionResult.review_token"
+                                v-if="visionResult.donation_eligible && visionResult.review_token && !isPartnerPortal"
                                 class="space-y-3 border-t border-sidebar-border/70 pt-3"
                             >
                                 <label v-if="!isPartnerPortal" class="block space-y-1.5 text-sm font-medium text-foreground"
@@ -514,12 +498,6 @@ function donateReviewedPhoto(): void {
                                     Set the partner Telegram chat ID in Donation Partners to enable donation and ensure both email and Telegram alerts
                                     can be queued.
                                 </p>
-                                <p v-if="isPartnerPortal" class="text-sm text-muted-foreground">
-                                    Donasi akan tercatat untuk organisasi Anda. Supermarket dan manager akan menerima notifikasi.
-                                </p>
-                                <p v-if="isPartnerPortal && !selectedDonationPartner?.telegram_ready" class="text-xs text-amber-700">
-                                    Akun mitra belum memiliki Telegram Chat ID. Minta manager melengkapi profil sebelum donasi.
-                                </p>
                                 <button
                                     type="button"
                                     class="w-full rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
@@ -529,7 +507,7 @@ function donateReviewedPhoto(): void {
                                     {{
                                         donationForm.processing
                                             ? 'Processing donation…'
-                                            : `Donate ${visionResult.quantity_available} ${visionResult.unit}`
+                                            : `Donate ${visionResult.quantity_available ?? 0} ${visionResult.unit ?? ''}`
                                     }}
                                 </button>
                                 <p v-if="!isPartnerPortal && donationPartners.length === 0" class="text-xs text-amber-700">
@@ -537,6 +515,9 @@ function donateReviewedPhoto(): void {
                                 </p>
                             </div>
                         </article>
+                        <p v-if="isPartnerPortal && visionResult?.donation_message" role="status" class="rounded-lg bg-muted/50 p-3 text-sm text-foreground">
+                            {{ visionResult.donation_message }}
+                        </p>
                         <p v-if="donationNotice" role="status" class="rounded-lg bg-muted/50 p-3 text-sm text-foreground">{{ donationNotice }}</p>
                     </div>
                 </div>
@@ -566,7 +547,6 @@ function donateReviewedPhoto(): void {
                                 <th class="px-4 py-3">Donated / sold</th>
                                 <th class="px-4 py-3">Expiration</th>
                                 <th class="px-4 py-3">Status</th>
-                                <th v-if="$page.props.auth.user?.role === 'manager'" class="px-4 py-3">Partner scan</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-sidebar-border/60">
@@ -592,15 +572,6 @@ function donateReviewedPhoto(): void {
                                     <span class="rounded-full px-2.5 py-1 text-xs font-semibold capitalize" :class="statusClass(batch.status)">{{
                                         batch.status.replace('_', ' ')
                                     }}</span>
-                                </td>
-                                <td v-if="$page.props.auth.user?.role === 'manager'" class="px-4 py-3">
-                                    <button
-                                        type="button"
-                                        class="rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
-                                        @click="router.post(route('simulation.batches.partner-review', batch.id), {}, { preserveScroll: true })"
-                                    >
-                                        {{ batch.partner_review_ready_at ? 'Tutup akses scan' : 'Siapkan untuk mitra' }}
-                                    </button>
                                 </td>
                             </tr>
                             <tr v-if="batches.length === 0">

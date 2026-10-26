@@ -11,7 +11,6 @@ use App\Services\AiAgentService;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -55,7 +54,6 @@ class SimulationController extends Controller
                     'source_synced_at' => $batch->source_synced_at?->toIso8601String(),
                     'expiration_date' => $batch->expiration_date->toDateString(),
                     'days_remaining' => $daysRemaining,
-                    'partner_review_ready_at' => $batch->partner_review_ready_at?->toIso8601String(),
                 ];
             });
 
@@ -84,23 +82,6 @@ class SimulationController extends Controller
             ->limit(10)
             ->get();
 
-        $donationBatches = ProductBatch::query()
-            ->with('product:id,sku,name,unit')
-            ->where('quantity_available', '>', 0)
-            ->whereIn('status', ['active', 'discounted'])
-            ->whereDate('expiration_date', '>=', now()->toDateString())
-            ->orderBy('expiration_date')
-            ->get()
-            ->map(fn (ProductBatch $batch): array => [
-                'id' => $batch->id,
-                'name' => $batch->product->name,
-                'sku' => $batch->product->sku,
-                'batch_code' => $batch->batch_code,
-                'quantity_available' => $batch->quantity_available,
-                'unit' => $batch->product->unit,
-                'expiration_date' => $batch->expiration_date->toDateString(),
-            ]);
-
         $partners = DonationPartner::query()
             ->active()
             ->orderBy('name')
@@ -113,7 +94,6 @@ class SimulationController extends Controller
 
         return Inertia::render('Simulation/Index', [
             'batches' => $batches,
-            'donationBatches' => $donationBatches,
             'donationPartners' => $partners,
             'pendingApprovals' => $pendingApprovals,
             'recentLogs' => AgentLogResource::collection($recentLogs),
@@ -122,61 +102,38 @@ class SimulationController extends Controller
         ]);
     }
 
-    /** Manager controls which individual inventory batches donation partners can review. */
-    public function togglePartnerReview(Request $request, ProductBatch $batch): RedirectResponse
-    {
-        $ready = DB::transaction(function () use ($request, $batch): ?bool {
-            $locked = ProductBatch::query()->lockForUpdate()->findOrFail($batch->id);
-            $ready = $locked->partner_review_ready_at === null;
-            if ($ready && ($locked->quantity_available < 1
-                || ! in_array($locked->status, ['active', 'discounted'], true)
-                || $locked->expiration_date->lt(now()->startOfDay()))) {
-                return null;
-            }
-            $locked->update([
-                'partner_review_ready_at' => $ready ? now() : null,
-                'partner_review_requested_by' => $ready ? $request->user()->id : null,
-            ]);
-
-            return $ready;
-        });
-
-        if ($ready === null) {
-            return back()->with('error', 'Batch harus memiliki stok dan belum kedaluwarsa sebelum dibuka untuk mitra.');
-        }
-
-        return back()->with('success', $ready ? 'Batch sekarang tersedia untuk scan mitra.' : 'Akses scan mitra untuk batch ini ditutup.');
-    }
-
     /** Analyze a single photo without changing inventory. */
     public function analyzeDonationPhoto(Request $request, AiAgentService $aiAgentService): RedirectResponse
     {
-        $validated = $request->validate([
-            'batch_id' => ['required', 'integer', 'exists:product_batches,id'],
+        $request->validate([
             'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
-        $batch = ProductBatch::query()
+        $batches = ProductBatch::query()
             ->with('product.category')
             ->where('quantity_available', '>', 0)
             ->whereIn('status', ['active', 'discounted'])
             ->whereDate('expiration_date', '>=', now()->toDateString())
-            ->find($validated['batch_id']);
+            ->orderBy('expiration_date')
+            ->limit(100)
+            ->get();
 
-        if (! $batch) {
-            return back()->withErrors(['batch_id' => 'Batch tersebut sudah tidak memiliki stok tersedia. Muat ulang halaman.']);
+        if ($batches->isEmpty()) {
+            return back()->withErrors(['photo' => 'Tidak ada stok aktif yang dapat dicocokkan.']);
         }
 
         $photo = $request->file('photo');
-        $decision = $aiAgentService->evaluateDonationPhoto(
-            $batch->product,
-            $batch,
+        $decision = $aiAgentService->identifyAndEvaluateDonationPhoto(
+            $batches,
             base64_encode($photo->get()),
             (string) $photo->getMimeType()
         );
+        $batch = $decision['matched_product_id'] === null
+            ? null
+            : $batches->firstWhere('product_id', $decision['matched_product_id']);
 
         $reviewToken = null;
-        if ($decision['donation_eligible']) {
+        if ($batch && $decision['donation_eligible']) {
             $reviewToken = (string) Str::uuid();
             $request->session()->put('simulation_vision_reviews.'.$reviewToken, [
                 'batch_id' => $batch->id,
@@ -187,11 +144,11 @@ class SimulationController extends Controller
 
         return back()->with('visionResult', [
             ...$decision,
-            'batch_id' => $batch->id,
-            'product_name' => $batch->product->name,
-            'batch_code' => $batch->batch_code,
-            'quantity_available' => $batch->quantity_available,
-            'unit' => $batch->product->unit,
+            'batch_id' => $batch?->id,
+            'product_name' => $batch?->product->name,
+            'batch_code' => $batch?->batch_code,
+            'quantity_available' => $batch?->quantity_available,
+            'unit' => $batch?->product->unit,
             'review_token' => $reviewToken,
         ]);
     }

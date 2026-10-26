@@ -23,7 +23,6 @@ Route::middleware(['auth', 'role:donation_partner'])->group(function () {
 Route::middleware(['auth', 'role:donation_partner', 'partner.active'])->prefix('partner')->name('partner.')->group(function () {
     Route::get('scan', [PartnerPortalController::class, 'scan'])->name('scan');
     Route::post('scan/analyze', [PartnerPortalController::class, 'analyze'])->name('scan.analyze');
-    Route::post('scan/donate', [PartnerPortalController::class, 'donate'])->name('scan.donate');
 });
 
 Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function () {
@@ -58,7 +57,6 @@ Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function 
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     Route::post('simulation/vision/analyze', [SimulationController::class, 'analyzeDonationPhoto'])->name('simulation.vision.analyze');
     Route::post('simulation/vision/donate', [SimulationController::class, 'donateReviewedBatch'])->name('simulation.vision.donate');
-    Route::post('simulation/batches/{batch}/partner-review', [SimulationController::class, 'togglePartnerReview'])->middleware('role:manager')->name('simulation.batches.partner-review');
 });
 
 Route::middleware(['auth', 'verified', 'role:manager'])->group(function () {

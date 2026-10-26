@@ -26,7 +26,13 @@ class ProductController extends Controller
     {
         $today = now()->startOfDay();
 
-        $query = Product::query()->with('category:id,name,slug');
+        $query = Product::query()->with([
+            'category:id,name,slug',
+            'batches' => fn ($batchQuery) => $batchQuery
+                ->with('discountApprovals')
+                ->orderBy('expiration_date')
+                ->orderBy('created_at'),
+        ]);
 
         // Search by name, SKU, or description
         if ($search = $request->input('search')) {
@@ -121,6 +127,33 @@ class ProductController extends Controller
                     'urgency' => $urgencyLevel,
                     'status' => $product->status,
                     'created_at' => $product->created_at?->toIso8601String(),
+                    'received_quantity' => (int) $product->batches->sum('quantity_received'),
+                    'donated_quantity' => (int) $product->batches->sum('quantity_donated'),
+                    'sold_quantity' => (int) $product->batches->sum('quantity_sold'),
+                    'batches' => $product->batches->map(function ($batch) use ($today): array {
+                        $batchDaysRemaining = (int) $today->diffInDays($batch->expiration_date->startOfDay(), false);
+                        $approval = $batch->discountApprovals->sortByDesc('id')->first();
+
+                        return [
+                            'id' => $batch->id,
+                            'batch_code' => $batch->batch_code,
+                            'source' => $batch->source,
+                            'received_at' => $batch->created_at?->toIso8601String(),
+                            'quantity_received' => $batch->quantity_received,
+                            'quantity_available' => $batch->quantity_available,
+                            'quantity_donated' => $batch->quantity_donated,
+                            'quantity_sold' => $batch->quantity_sold,
+                            'expiration_date' => $batch->expiration_date->toDateString(),
+                            'days_remaining' => $batchDaysRemaining,
+                            'status' => $batch->status,
+                            'discount_price' => $batch->discount_price !== null ? (float) $batch->discount_price : null,
+                            'discount_approval' => $approval ? [
+                                'status' => $approval->status,
+                                'recommended_percentage' => $approval->recommended_percentage,
+                                'approved_percentage' => $approval->approved_percentage,
+                            ] : null,
+                        ];
+                    })->values(),
                 ];
             });
 

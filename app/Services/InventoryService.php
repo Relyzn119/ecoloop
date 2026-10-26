@@ -173,7 +173,7 @@ class InventoryService
         $donation = DB::transaction(function () use ($batchId, $partnerId, $reason, $requirePartnerReview): ?array {
             $batch = ProductBatch::query()->lockForUpdate()->findOrFail($batchId);
             $product = Product::query()->with('category')->findOrFail($batch->product_id);
-            $partner = DonationPartner::query()->active()->whereNotNull('telegram_chat_id')->findOrFail($partnerId);
+            $partner = DonationPartner::query()->active()->findOrFail($partnerId);
 
             if ($batch->quantity_available < 1
                 || ! in_array($batch->status, ['active', 'discounted'], true)
