@@ -115,7 +115,7 @@ function refreshDashboard() {
     <Head title="EcoLoop Agent - Circular Economy Dashboard" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="dashboard-experience flex h-full min-w-0 w-full flex-1 flex-col gap-4 p-3 sm:gap-6 sm:p-6">
+        <div class="flex h-full flex-1 flex-col gap-6 p-4 sm:p-6">
             <!-- Flash notification -->
             <Transition name="flash">
                 <div
@@ -131,16 +131,16 @@ function refreshDashboard() {
             </Transition>
 
             <!-- Quick Action Bar & Agent Status Banner -->
-            <div class="dashboard-intro flex min-w-0 flex-col gap-4 rounded-[1.25rem] border border-white/70 bg-white/45 p-4 shadow-sm backdrop-blur-xl sm:rounded-[1.6rem] sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-3xl">Circular Economy Dashboard</h1>
-                    <p class="mt-1 text-xs leading-5 text-muted-foreground sm:text-sm">
+                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-3xl">Circular Economy Dashboard</h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
                         AI-driven shelf-life forecasting, dynamic markdown clearing, and food waste reduction metrics.
                     </p>
                 </div>
 
                 <!-- Quick Action Buttons -->
-                <div class="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
+                <div class="flex flex-wrap items-center gap-2.5">
                     <button
                         type="button"
                         :disabled="isRefreshing"
@@ -171,7 +171,7 @@ function refreshDashboard() {
             </div>
 
             <!-- KPI Metric Summary Cards -->
-            <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <!-- 1. Expiring Soon -->
                 <div
                     class="group relative overflow-hidden rounded-2xl border border-sidebar-border/80 bg-card p-5 shadow-sm transition-all duration-200 hover:shadow-md dark:border-sidebar-border"
@@ -179,7 +179,7 @@ function refreshDashboard() {
                     <div class="flex items-start justify-between">
                         <div class="space-y-1.5">
                             <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expiring Soon</p>
-                            <p class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-3xl">
+                            <p class="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
                                 {{ metrics.total_expiring_soon }}
                             </p>
                         </div>
@@ -206,7 +206,7 @@ function refreshDashboard() {
                     <div class="flex items-start justify-between">
                         <div class="space-y-1.5">
                             <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Food Waste Diverted</p>
-                            <p class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-3xl">
+                            <p class="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
                                 {{ metrics.food_saved_kg }} <span class="text-lg font-medium text-muted-foreground">kg</span>
                             </p>
                         </div>
@@ -233,7 +233,7 @@ function refreshDashboard() {
                     <div class="flex items-start justify-between">
                         <div class="space-y-1.5">
                             <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Revenue Loss Prevented</p>
-                            <p class="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-2xl">
+                            <p class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-2xl">
                                 {{ metrics.financial_loss_prevented_formatted }}
                             </p>
                         </div>
@@ -257,7 +257,7 @@ function refreshDashboard() {
                     <div class="flex items-start justify-between">
                         <div class="space-y-1.5">
                             <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">CO2e Emissions Reduced</p>
-                            <p class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-3xl">
+                            <p class="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
                                 {{ metrics.co2_emission_reduced_kg }} <span class="text-lg font-medium text-muted-foreground">kg</span>
                             </p>
                         </div>
@@ -276,23 +276,23 @@ function refreshDashboard() {
             </div>
 
             <!-- Main Content Area: Urgent Items Attention Table & Live Agent Activity Feed -->
-            <div class="grid min-w-0 flex-1 grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+            <div class="grid flex-1 gap-6 lg:grid-cols-3">
                 <!-- Urgent Items Attention (2 cols) -->
-                <div class="flex min-w-0 flex-col rounded-2xl border border-sidebar-border/80 bg-card shadow-sm dark:border-sidebar-border lg:col-span-2">
-                    <div class="flex items-start justify-between gap-2 border-b border-sidebar-border/80 px-4 py-4 sm:items-center sm:px-6">
+                <div class="flex flex-col rounded-2xl border border-sidebar-border/80 bg-card shadow-sm dark:border-sidebar-border lg:col-span-2">
+                    <div class="flex items-center justify-between border-b border-sidebar-border/80 px-6 py-4">
                         <div class="flex items-center gap-2.5">
                             <div class="rounded-lg bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400">
                                 <AlertTriangle class="size-4" />
                             </div>
                             <div>
-                                <h3 class="text-sm font-semibold leading-tight text-neutral-900 dark:text-neutral-100 sm:text-base">Urgent Clearance Items</h3>
-                                <p class="hidden text-xs text-muted-foreground sm:block">Products expiring in 1–3 days requiring AI markdown or donation</p>
+                                <h3 class="text-base font-semibold leading-tight text-neutral-900 dark:text-neutral-100">Urgent Clearance Items</h3>
+                                <p class="text-xs text-muted-foreground">Products expiring in 1–3 days requiring AI markdown or donation</p>
                             </div>
                         </div>
 
                         <Link
                             href="/inventory"
-                            class="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-emerald-600 sm:text-xs hover:text-emerald-700 dark:text-emerald-400"
+                            class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
                         >
                             <span>Open Inventory</span>
                             <ExternalLink class="size-3" />
@@ -300,8 +300,8 @@ function refreshDashboard() {
                     </div>
 
                     <!-- Table of Urgent Items -->
-                    <div class="min-w-0 flex-1 overflow-x-auto">
-                        <table class="w-full min-w-[620px] text-left text-sm sm:min-w-[680px]">
+                    <div class="flex-1 overflow-x-auto">
+                        <table class="w-full text-left text-sm">
                             <thead class="border-b border-sidebar-border/60 bg-muted/40 text-xs font-medium text-muted-foreground">
                                 <tr>
                                     <th class="px-6 py-3">Product / SKU</th>
@@ -371,8 +371,8 @@ function refreshDashboard() {
                 </div>
 
                 <!-- Live Agent Activity Feed Widget (1 col) -->
-                <div class="flex min-w-0 flex-col rounded-2xl border border-sidebar-border/80 bg-card shadow-sm dark:border-sidebar-border">
-                    <div class="flex items-start justify-between gap-2 border-b border-sidebar-border/80 px-4 py-4 sm:items-center sm:px-6">
+                <div class="flex flex-col rounded-2xl border border-sidebar-border/80 bg-card shadow-sm dark:border-sidebar-border">
+                    <div class="flex items-center justify-between border-b border-sidebar-border/80 px-6 py-4">
                         <div class="flex items-center gap-2.5">
                             <div class="rounded-lg bg-emerald-500/10 p-2 text-emerald-600 dark:text-emerald-400">
                                 <Bot class="size-4" />
@@ -390,7 +390,7 @@ function refreshDashboard() {
                     </div>
 
                     <!-- Logs List -->
-                    <div class="dashboard-feed max-h-[520px] flex-1 space-y-3.5 divide-y divide-sidebar-border/60 overflow-y-auto p-4">
+                    <div class="max-h-[520px] flex-1 space-y-3.5 divide-y divide-sidebar-border/60 overflow-y-auto p-4">
                         <div
                             v-for="log in recent_agent_logs"
                             :key="log.id"
@@ -477,8 +477,3 @@ function refreshDashboard() {
     transform: translateX(16px);
 }
 </style>
-
-
-
-
-

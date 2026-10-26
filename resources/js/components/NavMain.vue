@@ -2,14 +2,12 @@
 import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { useSidebar } from '@/components/ui/sidebar';
 
 defineProps<{
     items: NavItem[];
 }>();
 
 const page = usePage<SharedData>();
-const { isMobile, setOpenMobile } = useSidebar();
 </script>
 
 <template>
@@ -18,7 +16,7 @@ const { isMobile, setOpenMobile } = useSidebar();
         <SidebarMenu>
             <SidebarMenuItem v-for="item in items" :key="item.title">
                 <SidebarMenuButton as-child :is-active="item.href === page.url.split('?')[0] || (item.href === '/dashboard' && page.url === '/')">
-                    <Link :href="item.href" @click="isMobile && setOpenMobile(false)">
+                    <Link :href="item.href">
                         <component :is="item.icon" />
                         <span>{{ item.title }}</span>
                     </Link>
@@ -27,5 +25,3 @@ const { isMobile, setOpenMobile } = useSidebar();
         </SidebarMenu>
     </SidebarGroup>
 </template>
-
-
