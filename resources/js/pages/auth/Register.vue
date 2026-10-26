@@ -9,9 +9,12 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
 
 const form = useForm({
+    organization_name: '',
     name: '',
     email: '',
     phone: '',
+    telegram_chat_id: '',
+    address: '',
     password: '',
     password_confirmation: '',
 });
@@ -24,15 +27,41 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Create an account" description="Enter your details below to create your account">
-        <Head title="Register" />
+    <AuthBase title="Daftar mitra donasi" description="Akun akan ditinjau manager sebelum portal scan dapat digunakan.">
+        <Head title="Daftar Mitra Donasi" />
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">
             <div class="grid gap-6">
                 <div class="grid gap-2">
+                    <Label for="organization_name">Nama organisasi / mitra</Label
+                    ><Input id="organization_name" required v-model="form.organization_name" placeholder="Contoh: Bank Pangan Sejahtera" /><InputError
+                        :message="form.errors.organization_name"
+                    />
+                </div>
+                <div class="grid gap-2">
                     <Label for="name">Name</Label>
                     <Input id="name" type="text" required autofocus tabindex="1" autocomplete="name" v-model="form.name" placeholder="Full name" />
                     <InputError :message="form.errors.name" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="telegram_chat_id">Telegram Chat ID</Label
+                    ><Input id="telegram_chat_id" required v-model="form.telegram_chat_id" placeholder="Chat ID dari bot EcoLoop" /><InputError
+                        :message="form.errors.telegram_chat_id"
+                    />
+                    <p class="text-xs text-muted-foreground">Chat ID dipakai untuk pemberitahuan donasi setelah akun disetujui.</p>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="address">Alamat organisasi</Label
+                    ><textarea
+                        id="address"
+                        required
+                        v-model="form.address"
+                        rows="3"
+                        class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Alamat untuk pengambilan donasi"
+                    /><InputError :message="form.errors.address" />
                 </div>
 
                 <div class="grid gap-2">

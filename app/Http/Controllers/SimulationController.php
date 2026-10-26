@@ -11,6 +11,7 @@ use App\Services\AiAgentService;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -54,6 +55,7 @@ class SimulationController extends Controller
                     'source_synced_at' => $batch->source_synced_at?->toIso8601String(),
                     'expiration_date' => $batch->expiration_date->toDateString(),
                     'days_remaining' => $daysRemaining,
+                    'partner_review_ready_at' => $batch->partner_review_ready_at?->toIso8601String(),
                 ];
             });
 
@@ -118,6 +120,32 @@ class SimulationController extends Controller
             'lastUpdatedAt' => now()->toIso8601String(),
             'visionResult' => $request->session()->get('visionResult'),
         ]);
+    }
+
+    /** Manager controls which individual inventory batches donation partners can review. */
+    public function togglePartnerReview(Request $request, ProductBatch $batch): RedirectResponse
+    {
+        $ready = DB::transaction(function () use ($request, $batch): ?bool {
+            $locked = ProductBatch::query()->lockForUpdate()->findOrFail($batch->id);
+            $ready = $locked->partner_review_ready_at === null;
+            if ($ready && ($locked->quantity_available < 1
+                || ! in_array($locked->status, ['active', 'discounted'], true)
+                || $locked->expiration_date->lt(now()->startOfDay()))) {
+                return null;
+            }
+            $locked->update([
+                'partner_review_ready_at' => $ready ? now() : null,
+                'partner_review_requested_by' => $ready ? $request->user()->id : null,
+            ]);
+
+            return $ready;
+        });
+
+        if ($ready === null) {
+            return back()->with('error', 'Batch harus memiliki stok dan belum kedaluwarsa sebelum dibuka untuk mitra.');
+        }
+
+        return back()->with('success', $ready ? 'Batch sekarang tersedia untuk scan mitra.' : 'Akses scan mitra untuk batch ini ditutup.');
     }
 
     /** Analyze a single photo without changing inventory. */

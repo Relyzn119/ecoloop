@@ -54,6 +54,9 @@ return [
 
     'n8n' => [
         'webhook_url' => env('N8N_WEBHOOK_URL'),
+        'event_webhook_url' => env('N8N_EVENT_WEBHOOK_URL'),
+        'event_webhook_username' => env('N8N_EVENT_WEBHOOK_USERNAME'),
+        'event_webhook_password' => env('N8N_EVENT_WEBHOOK_PASSWORD'),
     ],
 
     'telegram' => [

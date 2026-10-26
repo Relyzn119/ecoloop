@@ -17,6 +17,7 @@ class ProductBatch extends Model
         'product_id', 'batch_code', 'quantity_received', 'quantity_available',
         'quantity_donated', 'quantity_sold', 'expiration_date', 'original_price',
         'discount_price', 'status', 'source', 'source_reference', 'store_code', 'source_synced_at',
+        'partner_review_ready_at', 'partner_review_requested_by',
     ];
 
     protected function casts(): array
@@ -28,9 +29,15 @@ class ProductBatch extends Model
             'quantity_sold' => 'integer',
             'expiration_date' => 'date',
             'source_synced_at' => 'datetime',
+            'partner_review_ready_at' => 'datetime',
             'original_price' => 'decimal:2',
             'discount_price' => 'decimal:2',
         ];
+    }
+
+    public function partnerReviewRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'partner_review_requested_by');
     }
 
     public function product(): BelongsTo

@@ -168,16 +168,17 @@ class InventoryService
     }
 
     /** Donate the remaining quantity from one visually reviewed batch. */
-    public function donateReviewedBatch(int $batchId, int $partnerId, string $reason): array
+    public function donateReviewedBatch(int $batchId, int $partnerId, string $reason, bool $requirePartnerReview = false): array
     {
-        $donation = DB::transaction(function () use ($batchId, $partnerId, $reason): ?array {
+        $donation = DB::transaction(function () use ($batchId, $partnerId, $reason, $requirePartnerReview): ?array {
             $batch = ProductBatch::query()->lockForUpdate()->findOrFail($batchId);
             $product = Product::query()->with('category')->findOrFail($batch->product_id);
             $partner = DonationPartner::query()->active()->whereNotNull('telegram_chat_id')->findOrFail($partnerId);
 
             if ($batch->quantity_available < 1
                 || ! in_array($batch->status, ['active', 'discounted'], true)
-                || $batch->expiration_date->lt(now()->startOfDay())) {
+                || $batch->expiration_date->lt(now()->startOfDay())
+                || ($requirePartnerReview && $batch->partner_review_ready_at === null)) {
                 return null;
             }
 
@@ -186,6 +187,8 @@ class InventoryService
                 'quantity_available' => 0,
                 'quantity_donated' => $batch->quantity_donated + $quantity,
                 'status' => 'donated',
+                'partner_review_ready_at' => null,
+                'partner_review_requested_by' => null,
             ]);
 
             AgentLog::query()->create([
@@ -219,6 +222,19 @@ class InventoryService
         if ($donation === null) {
             return ['success' => false, 'message' => 'Batch ini sudah tidak memiliki stok tersedia. Muat ulang data sebelum mencoba lagi.'];
         }
+
+        app(N8nFinalEventService::class)->queue(
+            'donation.completed',
+            'donation-batch:'.$donation['batch']->id.':'.$donation['batch']->updated_at?->timestamp,
+            [
+                'product_id' => $donation['product']->id,
+                'product_name' => $donation['product']->name,
+                'batch_id' => $donation['batch']->id,
+                'partner_id' => $donation['partner']->id,
+                'quantity' => $donation['quantity'],
+                'unit' => $donation['product']->unit,
+            ]
+        );
 
         $notificationsQueued = true;
         try {
@@ -311,6 +327,19 @@ class InventoryService
         if ($donation === null) {
             return ['success' => false, 'quantity' => 0];
         }
+
+        app(N8nFinalEventService::class)->queue(
+            'donation.completed',
+            'donation-batch:'.$donation['batch']->id.':'.$donation['batch']->updated_at?->timestamp,
+            [
+                'product_id' => $donation['product']->id,
+                'product_name' => $donation['product']->name,
+                'batch_id' => $donation['batch']->id,
+                'partner_id' => $donation['partner']->id,
+                'quantity' => $donation['quantity'],
+                'unit' => $donation['product']->unit,
+            ]
+        );
 
         try {
             $this->notificationService->queueDonationAlerts(
@@ -482,6 +511,18 @@ class InventoryService
 
                 $donatedQuantity = $donation['quantity'];
                 if ($donatedQuantity > 0) {
+                    app(N8nFinalEventService::class)->queue(
+                        'donation.completed',
+                        'donation-batch:'.$donation['batch']->id.':'.$donation['batch']->updated_at?->timestamp,
+                        [
+                            'product_id' => $product->id,
+                            'product_name' => $product->name,
+                            'batch_id' => $donation['batch']->id,
+                            'partner_id' => $partner->id,
+                            'quantity' => $donatedQuantity,
+                            'unit' => $product->unit,
+                        ]
+                    );
                     $this->notificationService->queueDonationAlerts($partner, $product->fresh(), $donation['batch'], $reason);
                 }
 

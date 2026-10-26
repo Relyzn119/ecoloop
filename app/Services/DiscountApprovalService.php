@@ -23,7 +23,7 @@ class DiscountApprovalService
             throw ValidationException::withMessages(['decision' => 'Choose approve or reject.']);
         }
 
-        return DB::transaction(function () use ($approvalId, $user, $decision, $percentage): DiscountApproval {
+        $approval = DB::transaction(function () use ($approvalId, $user, $decision, $percentage): DiscountApproval {
             $approval = DiscountApproval::query()->lockForUpdate()->findOrFail($approvalId);
             if ($approval->status !== 'pending') {
                 throw ValidationException::withMessages(['approval' => 'This discount request has already been decided.']);
@@ -74,6 +74,23 @@ class DiscountApprovalService
 
             return $approval->fresh(['product', 'batch']);
         });
+
+        if ($approval->status === 'approved') {
+            app(N8nFinalEventService::class)->queue(
+                'discount.approved',
+                'discount-approval:'.$approval->id,
+                [
+                    'approval_id' => $approval->id,
+                    'product_id' => $approval->product_id,
+                    'batch_id' => $approval->product_batch_id,
+                    'discount_percentage' => $approval->approved_percentage,
+                    'discount_price' => $approval->approved_price,
+                    'decided_by' => $approval->decided_by,
+                ]
+            );
+        }
+
+        return $approval;
     }
 
     private function refreshProductSummary(int $productId): void

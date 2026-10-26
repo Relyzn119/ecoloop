@@ -4,10 +4,11 @@ import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import { FlaskConical, Handshake, HeartHandshake, LayoutGrid, Package, Percent, ScrollText, Settings } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
+const page = usePage<{ auth: { user: { role: string } | null } }>();
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
@@ -39,7 +40,13 @@ const mainNavItems: NavItem[] = [
         href: '/settings',
         icon: Settings,
     },
-];
+]
+    .filter((item) => page.props.auth.user?.role !== 'donation_partner' || item.title === 'Settings')
+    .map((item) =>
+        page.props.auth.user?.role === 'donation_partner' && item.title === 'Settings'
+            ? { ...item, title: 'Portal Mitra', href: '/partner/scan', icon: FlaskConical }
+            : item,
+    );
 
 const footerNavItems: NavItem[] = [
     {
@@ -52,7 +59,7 @@ const footerNavItems: NavItem[] = [
         href: '/reports?type=discount',
         icon: Percent,
     },
-];
+].filter(() => page.props.auth.user?.role !== 'donation_partner');
 </script>
 
 <template>

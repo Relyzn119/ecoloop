@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -55,5 +56,21 @@ class User extends Authenticatable
     public function scopeNotificationRecipients(Builder $query): Builder
     {
         return $query->whereIn('role', ['manager', 'cashier']);
+    }
+
+    /** Get the donation partner profile owned by this account. */
+    public function donationPartner(): HasOne
+    {
+        return $this->hasOne(DonationPartner::class);
+    }
+
+    /** Resolve the post-authentication destination for this account role. */
+    public function landingRoute(): string
+    {
+        if ($this->role !== 'donation_partner') {
+            return 'dashboard';
+        }
+
+        return $this->donationPartner?->is_active ? 'partner.scan' : 'partner.pending';
     }
 }

@@ -6,6 +6,7 @@ use Database\Factories\DonationPartnerFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DonationPartner extends Model
 {
@@ -25,6 +26,7 @@ class DonationPartner extends Model
         'telegram_chat_id',
         'address',
         'is_active',
+        'user_id',
     ];
 
     /**
@@ -48,5 +50,16 @@ class DonationPartner extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    /** Get the account that manages this donation partner profile. */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function isReadyForPortal(): bool
+    {
+        return $this->is_active && $this->user_id !== null;
     }
 }

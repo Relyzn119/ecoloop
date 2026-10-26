@@ -1,5 +1,5 @@
 {
-  "name": "EcoLoop Agent - Laravel Integration (AI Pending)",
+  "name": "EcoLoop Agent - Laravel-Owned (n8n Draft - Side Effects Disabled)",
   "nodes": [
     {
       "webhookId": "f0110001-0000-4000-8000-000000000011",
@@ -16,7 +16,10 @@
         260,
         260
       ],
-      "typeVersion": 2.1
+      "typeVersion": 2.1,
+      "disabled": true,
+      "notes": "Disabled for safety: Laravel owns inventory sync, AI decisions, donations, discounts, approvals, and notifications. Do not enable this trigger unless the Laravel automation is deliberately replaced.",
+      "notesInFlow": true
     },
     {
       "webhookId": "f0110001-0000-4000-8000-000000000012",
@@ -33,7 +36,10 @@
         260,
         460
       ],
-      "typeVersion": 2.1
+      "typeVersion": 2.1,
+      "disabled": true,
+      "notes": "Disabled for safety: Laravel owns inventory sync, AI decisions, donations, discounts, approvals, and notifications. Do not enable this trigger unless the Laravel automation is deliberately replaced.",
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -67,7 +73,10 @@
         260,
         700
       ],
-      "typeVersion": 1.2
+      "typeVersion": 1.2,
+      "disabled": true,
+      "notes": "Disabled for safety: Laravel owns inventory sync, AI decisions, donations, discounts, approvals, and notifications. Do not enable this trigger unless the Laravel automation is deliberately replaced.",
+      "notesInFlow": true
     },
     {
       "id": "f0110001-0000-4000-8000-000000000005",
@@ -83,7 +92,7 @@
         "options": {},
         "sendHeaders": true,
         "method": "GET",
-        "url": "http://ecoloop.test/api/v1/inventory/expiring-soon?days=7"
+        "url": "http://127.0.0.1:8080/api/v1/inventory/expiring-soon?days=7"
       },
       "alwaysOutputData": true,
       "name": "Fetch Expiring Inventory",
@@ -92,7 +101,10 @@
         520,
         700
       ],
-      "typeVersion": 4.2
+      "typeVersion": 4.2,
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "f0110001-0000-4000-8000-000000000006",
@@ -299,10 +311,13 @@
             }
           ]
         },
-        "url": "http://ecoloop.test/api/v1/inventory/apply-discount",
+        "url": "http://127.0.0.1:8080/api/v1/inventory/apply-discount",
         "specifyBody": "json"
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "typeVersion": 2,
@@ -335,7 +350,7 @@
             }
           }
         },
-        "url": "http://ecoloop.test/api/v1/inventory/reserve-donation",
+        "url": "http://127.0.0.1:8080/api/v1/inventory/reserve-donation",
         "sendHeaders": true,
         "method": "POST",
         "headerParameters": {
@@ -355,7 +370,10 @@
         2620,
         620
       ],
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "type": "n8n-nodes-base.code",
@@ -524,7 +542,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "specifyBody": "json",
-        "url": "http://ecoloop.test/api/v1/agent-logs/summary",
+        "url": "http://127.0.0.1:8080/api/v1/agent-logs/summary",
         "method": "POST",
         "sendBody": true,
         "headerParameters": {
@@ -549,7 +567,10 @@
         700
       ],
       "typeVersion": 4.2,
-      "id": "f0110001-0000-4000-8000-000000000030"
+      "id": "f0110001-0000-4000-8000-000000000030",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "demo-001",
@@ -566,7 +587,10 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "webhookId": "d3e00001-0000-4000-8000-000000000001"
+      "webhookId": "d3e00001-0000-4000-8000-000000000001",
+      "disabled": true,
+      "notes": "Disabled for safety: Laravel owns inventory sync, AI decisions, donations, discounts, approvals, and notifications. Do not enable this trigger unless the Laravel automation is deliberately replaced.",
+      "notesInFlow": true
     },
     {
       "id": "demo-002",
@@ -593,7 +617,7 @@
       ],
       "parameters": {
         "method": "GET",
-        "url": "={{ 'http://ecoloop.test/api/v1/products/' + $json.product_id }}",
+        "url": "={{ 'http://127.0.0.1:8080/api/v1/products/' + $json.product_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -611,7 +635,10 @@
           }
         }
       },
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "demo-004",
@@ -721,7 +748,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://ecoloop.test/api/v1/inventory/apply-discount",
+        "url": "http://127.0.0.1:8080/api/v1/inventory/apply-discount",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ ({ product_id: $json.product_id, discount_percentage: $json.discount_percentage, reason: $json.reasoning }) }}",
@@ -748,7 +775,10 @@
           }
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "demo-009",
@@ -761,7 +791,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://ecoloop.test/api/v1/inventory/reserve-donation",
+        "url": "http://127.0.0.1:8080/api/v1/inventory/reserve-donation",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ ({ product_id: $json.product_id, partner_id: $json.recommended_partner_id || 1, reason: $json.reasoning }) }}",
@@ -788,7 +818,10 @@
           }
         }
       },
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "demo-010",
@@ -832,7 +865,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://ecoloop.test/api/v1/ai/evaluate",
+        "url": "http://127.0.0.1:8080/api/v1/ai/evaluate",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ ({ product_id: $json.product_id ?? $json.id }) }}",
@@ -858,7 +891,10 @@
           }
         }
       },
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     },
     {
       "id": "demo-005",
@@ -871,7 +907,7 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://ecoloop.test/api/v1/ai/evaluate",
+        "url": "http://127.0.0.1:8080/api/v1/ai/evaluate",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ ({ product_id: $json.product_id ?? $json.id }) }}",
@@ -897,7 +933,10 @@
           }
         }
       },
-      "onError": "stopWorkflow"
+      "onError": "stopWorkflow",
+      "disabled": true,
+      "notes": "Disabled for safety: this external request can duplicate Laravel-owned decisions, inventory writes, notifications, or telemetry. Keep disabled while Laravel remains authoritative.",
+      "notesInFlow": true
     }
   ],
   "connections": {
@@ -1295,7 +1334,7 @@
         []
       ]
     },
-    "AI Evaluator (Model Pending)": {
+    "Evaluate Inventory via 9Router": {
       "main": [
         [
           {
@@ -1306,7 +1345,7 @@
         ]
       ]
     },
-    "AI Evaluator (Model Pending) - Demo": {
+    "Evaluate Product via 9Router (Demo)": {
       "main": [
         [
           {
