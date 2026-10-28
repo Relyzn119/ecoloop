@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\PartnerManagementController as AdminPartnerManagementController;
 use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InventorySyncHistoryController;
 use App\Http\Controllers\PartnerPortalController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
@@ -41,6 +42,7 @@ Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function 
 
     // Product Inventory Management CRUD & Manual Overrides
     Route::get('inventory', [ProductController::class, 'index'])->name('inventory.index');
+    Route::get('inventory/sync-history', [InventorySyncHistoryController::class, 'index'])->name('inventory.sync-history');
     Route::get('inventory/create', [ProductController::class, 'create'])->name('inventory.create');
     Route::post('inventory', [ProductController::class, 'store'])->name('inventory.store');
     Route::post('inventory/auto-sync/toggle', [ProductController::class, 'toggleAutoSync'])->name('inventory.auto-sync.toggle');

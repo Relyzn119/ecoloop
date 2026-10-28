@@ -522,6 +522,7 @@ class InventoryService
                 return null;
             }
 
+            $stockBefore = (int) $product->batches()->sum('quantity_available');
             $quantity = $batch->quantity_available;
             $batch->update([
                 'quantity_available' => 0,
@@ -554,11 +555,13 @@ class InventoryService
                 'batch' => $batch->fresh(),
                 'quantity' => $quantity,
                 'reason' => $reason,
+                'stock_before' => $stockBefore,
+                'stock_after' => $stockBefore - $quantity,
             ];
         });
 
         if ($donation === null) {
-            return ['success' => false, 'quantity' => 0];
+            return ['success' => false, 'quantity' => 0, 'batch_id' => $batchId];
         }
 
         app(N8nFinalEventService::class)->queue(
@@ -574,6 +577,7 @@ class InventoryService
             ]
         );
 
+        $notificationsQueued = true;
         try {
             $this->notificationService->queueDonationAlerts(
                 $donation['partner'],
@@ -583,6 +587,7 @@ class InventoryService
                 broadcastToActivePartners: true
             );
         } catch (Throwable $exception) {
+            $notificationsQueued = false;
             Log::error('Demo donation succeeded but notification queueing failed.', [
                 'batch_id' => $donation['batch']->id,
                 'partner_id' => $donation['partner']->id,
@@ -592,9 +597,18 @@ class InventoryService
 
         return [
             'success' => true,
+            'product_id' => $donation['product']->id,
             'quantity' => $donation['quantity'],
+            'unit' => $donation['product']->unit,
             'product_name' => $donation['product']->name,
+            'sku' => $donation['product']->sku,
             'batch_id' => $donation['batch']->id,
+            'batch_code' => $donation['batch']->batch_code,
+            'expiration_date' => $donation['batch']->expiration_date->toDateString(),
+            'stock_before' => $donation['stock_before'],
+            'stock_after' => $donation['stock_after'],
+            'partner_name' => $donation['partner']->name,
+            'notifications_queued' => $notificationsQueued,
         ];
     }
 

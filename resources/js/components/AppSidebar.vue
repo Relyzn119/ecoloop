@@ -5,7 +5,7 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { FlaskConical, Handshake, HeartHandshake, LayoutGrid, Package, Percent, ScrollText, Settings } from 'lucide-vue-next';
+import { FlaskConical, Handshake, HeartHandshake, History, LayoutGrid, Package, Percent, ScrollText, Settings } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const page = usePage<{ auth: { user: { role: string } | null } }>();
@@ -21,6 +21,11 @@ const supermarketNavItems: NavItem[] = [
         title: 'Inventory',
         href: '/inventory',
         icon: Package,
+    },
+    {
+        title: 'Riwayat Sinkronisasi',
+        href: '/inventory/sync-history',
+        icon: History,
     },
     {
         title: 'AI Simulation',

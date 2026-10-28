@@ -394,10 +394,11 @@ class ProductController extends Controller
         $result = $sync->synchronizeForDemo();
 
         if (($result['demo_donation_error'] ?? null) !== null) {
-            return redirect()->route('inventory.index')->with(
+            return redirect()->route('inventory.sync-history')->with(
                 'error',
                 sprintf(
-                    'Demo sync updated central inventory, but only %d of %d urgent products were donated across %d active partners. %s',
+                    'Demo sync updated %d products, but only %d of %d urgent products were donated across %d active foundation partners. %s',
+                    $result['changed_products'],
                     $result['demo_donated_products'],
                     $result['demo_expected_products'],
                     $result['demo_partner_count'],
@@ -406,13 +407,15 @@ class ProductController extends Controller
             );
         }
 
-        return redirect()->route('inventory.index')->with(
+        return redirect()->route('inventory.sync-history')->with(
             'success',
             sprintf(
-                'Sync Now completed: %d new products, %d units received, and %d units sold. %d urgent products expiring within 2 days were donated (%d units) across %d active partners; partner notifications were queued.',
+                'Sync Now completed: %d new products, %d products updated, %d units received, %d units sold, %d discount recommendations pending, and %d urgent products donated (%d units) across %d active foundation partners.',
                 $result['new_products'],
+                $result['changed_products'],
                 $result['received_units'],
                 $result['sold_units'],
+                $result['discount_recommendations'],
                 $result['demo_donated_products'],
                 $result['demo_donated_units'],
                 $result['demo_partner_count']

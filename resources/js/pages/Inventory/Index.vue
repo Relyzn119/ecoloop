@@ -2,7 +2,7 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Edit3, Handshake, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Edit3, Handshake, History, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 interface CategoryItem {
@@ -98,7 +98,9 @@ interface AutoSyncSummary {
     received_units: number;
     sales_transactions: number;
     sold_units: number;
-    changed_products: number;
+    changed_products?: number;
+    discount_recommendations?: number;
+    donated_units?: number;
     demo_new_products?: number;
     demo_donated_products?: number;
     demo_donated_units?: number;
@@ -505,10 +507,15 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                 ({{ auto_sync.last_sync_summary.demo_donated_units }} units) across
                                 {{ auto_sync.last_sync_summary.demo_partner_count ?? 0 }} partners
                             </template>
+                            · {{ auto_sync.last_sync_summary.changed_products ?? 0 }} products updated
+                            · {{ auto_sync.last_sync_summary.discount_recommendations ?? 0 }} pending discount recommendations
                         </template>
                     </p>
                 </div>
                 <div class="flex shrink-0 flex-wrap gap-2">
+                    <Link href="/inventory/sync-history" class="inline-flex items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-white dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800">
+                        <History class="size-4" /> Sync History
+                    </Link>
                     <button
                         type="button"
                         class="inline-flex items-center gap-2 rounded-lg border border-neutral-300 px-3.5 py-2 text-sm font-semibold text-neutral-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
