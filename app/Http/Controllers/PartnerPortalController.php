@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AgentLog;
+use App\Models\DiscountApproval;
+use App\Models\DonationPartner;
 use App\Models\PartnerDonationClaim;
 use App\Models\ProductBatch;
 use App\Services\AiAgentService;
 use App\Services\PartnerDonationClaimService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -53,6 +57,97 @@ class PartnerPortalController extends Controller
             ]);
 
         return Inertia::render('Umkm/Offers', ['offers' => $offers]);
+    }
+
+    public function donationToday(Request $request): Response
+    {
+        abort_unless($request->user()->role === 'donation_partner', 403);
+
+        [$start, $end] = $this->jakartaDayWindow();
+        $donations = $this->donationLogQuery($start, $end)
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->withQueryString()
+            ->through(fn (AgentLog $log): array => $this->donationPayload($log));
+
+        return Inertia::render('Partner/DonationsToday', ['donations' => $donations]);
+    }
+
+    public function stores(Request $request): Response
+    {
+        abort_unless(in_array($request->user()->role, ['donation_partner', 'umkm_partner'], true), 403);
+
+        $stores = DonationPartner::query()
+            ->active()
+            ->where('partner_type', 'business_owner')
+            ->orderBy('name')
+            ->paginate(20)
+            ->withQueryString()
+            ->through(fn (DonationPartner $store): array => [
+                'id' => $store->id,
+                'name' => $store->name,
+                'contact_person' => $store->contact_person,
+                'phone' => $store->phone,
+                'email' => $store->email,
+                'address' => $store->address,
+            ]);
+
+        return Inertia::render('Partner/Stores', [
+            'portalType' => $request->user()->role === 'umkm_partner' ? 'umkm' : 'donation',
+            'stores' => $stores,
+        ]);
+    }
+
+    public function history(Request $request): Response
+    {
+        $role = $request->user()->role;
+        abort_unless(in_array($role, ['donation_partner', 'umkm_partner'], true), 403);
+
+        $validated = $request->validate(['period' => ['nullable', 'in:month,year']]);
+        $period = $validated['period'] ?? 'month';
+        $end = CarbonImmutable::now('Asia/Jakarta')->utc();
+        $start = $period === 'year'
+            ? $end->setTimezone('Asia/Jakarta')->subYear()->utc()
+            : $end->setTimezone('Asia/Jakarta')->subMonth()->utc();
+
+        if ($role === 'donation_partner') {
+            $items = $this->donationLogQuery($start, $end)
+                ->orderByDesc('created_at')
+                ->paginate(20)
+                ->withQueryString()
+                ->through(fn (AgentLog $log): array => $this->donationPayload($log));
+            $type = 'donation';
+        } else {
+            $items = DiscountApproval::query()
+                ->with(['product:id,name,sku,unit', 'batch:id,batch_code,quantity_available,original_price,expiration_date'])
+                ->where('status', 'approved')
+                ->whereNotNull('decided_at')
+                ->where('decided_at', '>=', $start)
+                ->where('decided_at', '<', $end)
+                ->orderByDesc('decided_at')
+                ->paginate(20)
+                ->withQueryString()
+                ->through(fn (DiscountApproval $approval): array => [
+                    'id' => $approval->id,
+                    'product_name' => $approval->product?->name ?? 'Produk dihapus',
+                    'sku' => $approval->product?->sku ?? '—',
+                    'batch_code' => $approval->batch?->batch_code ?? '—',
+                    'quantity_available' => (int) ($approval->batch?->quantity_available ?? 0),
+                    'unit' => $approval->product?->unit ?? 'pcs',
+                    'discount_percentage' => (int) ($approval->approved_percentage ?? 0),
+                    'original_price' => (float) ($approval->batch?->original_price ?? 0),
+                    'discount_price' => (float) ($approval->approved_price ?? 0),
+                    'expiration_date' => $approval->batch?->expiration_date?->toDateString(),
+                    'occurred_at' => $approval->decided_at?->toIso8601String(),
+                ]);
+            $type = 'discount';
+        }
+
+        return Inertia::render('Partner/History', [
+            'type' => $type,
+            'period' => $period,
+            'items' => $items,
+        ]);
     }
 
     public function scan(Request $request): Response
@@ -177,6 +272,42 @@ class PartnerPortalController extends Controller
             ->whereDate('expiration_date', '>=', now()->toDateString())
             ->orderBy('expiration_date')
             ->limit(100);
+    }
+
+    private function donationLogQuery(CarbonImmutable $start, CarbonImmutable $end)
+    {
+        return AgentLog::query()
+            ->with(['product:id,name,sku,unit', 'partner:id,name'])
+            ->where('action_type', 'donation_requested')
+            ->where('status', 'success')
+            ->where('payload->event_type', 'donation_completed')
+            ->where('created_at', '>=', $start)
+            ->where('created_at', '<', $end);
+    }
+
+    /** @return array<string, mixed> */
+    private function donationPayload(AgentLog $log): array
+    {
+        $payload = $log->payload ?? [];
+
+        return [
+            'id' => $log->id,
+            'product_name' => $log->product?->name ?? $payload['product_name'] ?? 'Produk dihapus',
+            'sku' => $log->product?->sku ?? $payload['product_sku'] ?? '—',
+            'batch_code' => $payload['batch_code'] ?? '—',
+            'quantity' => (int) ($payload['quantity_donated'] ?? $payload['quantity'] ?? 0),
+            'unit' => $payload['unit'] ?? $log->product?->unit ?? 'pcs',
+            'occurred_at' => $log->created_at?->toIso8601String(),
+            'stock_decision_pending' => (bool) ($payload['stock_decision_pending'] ?? false),
+        ];
+    }
+
+    /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
+    private function jakartaDayWindow(): array
+    {
+        $start = CarbonImmutable::now('Asia/Jakarta')->startOfDay();
+
+        return [$start->utc(), $start->addDay()->utc()];
     }
 
     /** @return Collection<int, ProductBatch> */

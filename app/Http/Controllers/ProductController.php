@@ -243,7 +243,7 @@ class ProductController extends Controller
             $message .= ' Rekomendasi diskon dikirim ke manager/kasir untuk persetujuan.';
         }
 
-        return to_route($request->user()?->role === 'business_owner' ? 'business-owner.inventory' : 'inventory.index')
+        return to_route('inventory.index')
             ->with('success', $message);
     }
 
@@ -457,12 +457,14 @@ class ProductController extends Controller
         return redirect()->route('inventory.sync-history')->with(
             'success',
             sprintf(
-                'Sync Now completed: %d new products, %d products updated, %d units received, %d units sold, %d discount recommendations pending, and %d urgent products await Telegram approval (%d approval buttons). No donation stock changed before confirmation.',
+                'Sync Now completed: %d new products, %d products updated, %d units received, %d units sold, %d discount recommendations pending (including %d demo discount batches), %d donation pre-alerts for products expiring in 3 days, and %d urgent products await Telegram approval (%d approval buttons). No donation stock changed before confirmation.',
                 $result['new_products'],
                 $result['changed_products'],
                 $result['received_units'],
                 $result['sold_units'],
                 $result['discount_recommendations'],
+                $result['demo_discount_products'],
+                $result['demo_prealert_products'],
                 $result['demo_pending_products'],
                 $result['demo_approval_actions']
             )

@@ -85,8 +85,8 @@ class PartnerDonationClaimService
 
     public function decideStock(string $claimId, User $manager, string $chatId, string $decision): string
     {
-        if (! in_array($manager->role, ['manager', 'cashier'], true)) {
-            throw new AuthorizationException('Only a manager or cashier can confirm stock adjustment.');
+        if (! in_array($manager->role, ['business_owner', 'manager', 'cashier'], true)) {
+            throw new AuthorizationException('Only a business owner, manager, or cashier can confirm stock adjustment.');
         }
         if (! in_array($decision, ['reduce', 'keep'], true)) {
             throw new AuthorizationException('Unknown stock decision.');

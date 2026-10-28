@@ -58,7 +58,7 @@ const remove = (partner: Partner) => {
 const partnerTypeLabel = (partnerType: Partner['partner_type']) => ({
     foundation: 'Yayasan / Badan Amal',
     umkm: 'Mitra UMKM',
-    business_owner: 'Pemilik Bisnis / Pemberi Donasi',
+    business_owner: 'Supermarket / Toko — Pemberi Donasi & Diskon',
 })[partnerType];
 </script>
 
@@ -69,7 +69,7 @@ const partnerTypeLabel = (partnerType: Partner['partner_type']) => ({
             <header>
                 <p class="text-sm font-semibold uppercase tracking-wider text-emerald-700">Admin EcoLoop</p>
                 <h1 class="mt-1 text-2xl font-bold tracking-tight text-foreground">Kelola akun mitra</h1>
-                <p class="mt-2 max-w-3xl text-sm text-muted-foreground">Tinjau pendaftaran Yayasan, UMKM, dan Pemilik Bisnis/Pemberi Donasi. Persetujuan di sini mengaktifkan akun mitra; dashboard supermarket tetap dikelola oleh akun manager/kasir.</p>
+                <p class="mt-2 max-w-3xl text-sm text-muted-foreground">Tinjau dan kelola akun Yayasan penerima donasi, UMKM penerima diskon, serta supermarket/toko pemberi donasi dan diskon. Persetujuan mengaktifkan portal sesuai peran; akun supermarket mendapat dashboard operasional penuh.</p>
             </header>
 
             <div v-if="successMessage" class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300" role="status">
@@ -89,7 +89,7 @@ const partnerTypeLabel = (partnerType: Partner['partner_type']) => ({
                         <option value="">Semua status</option><option value="pending">Menunggu</option><option value="active">Aktif</option>
                     </select>
                     <select v-model="type" class="h-10 rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="">Semua jenis mitra</option><option value="foundation">Yayasan / Badan Amal</option><option value="umkm">UMKM</option><option value="business_owner">Pemilik Bisnis / Pemberi Donasi</option>
+                        <option value="">Semua jenis akun</option><option value="foundation">Yayasan / Badan Amal</option><option value="umkm">UMKM</option><option value="business_owner">Supermarket / Toko — Pemberi Donasi & Diskon</option>
                     </select>
                     <button type="submit" class="h-10 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">Terapkan filter</button>
                 </form>

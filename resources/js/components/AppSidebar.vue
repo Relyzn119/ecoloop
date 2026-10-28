@@ -5,11 +5,11 @@ import NavUser from '@/components/NavUser.vue';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
-import { FlaskConical, Handshake, HeartHandshake, History, LayoutGrid, Package, Percent, ScrollText, Settings } from 'lucide-vue-next';
+import { BadgePercent, CalendarDays, FlaskConical, Handshake, HeartHandshake, History, LayoutGrid, Package, Percent, ScrollText, Settings, Store } from 'lucide-vue-next';
 import AppLogo from './AppLogo.vue';
 
 const page = usePage<{ auth: { user: { role: string } | null } }>();
-const partnerRoles = ['donation_partner', 'umkm_partner', 'business_owner'];
+const partnerRoles = ['donation_partner', 'umkm_partner'];
 const userRole = page.props.auth.user?.role;
 const supermarketNavItems: NavItem[] = [
     {
@@ -45,13 +45,19 @@ const supermarketNavItems: NavItem[] = [
 ];
 const mainNavItems: NavItem[] = userRole === 'ecoloop_admin'
     ? [{ title: 'Kelola Mitra', href: '/admin/partners', icon: Handshake }]
-    : userRole === 'business_owner'
-      ? [
-            { title: 'Inventaris Bisnis', href: '/business-owner/inventory', icon: Package },
-            { title: 'Status Akun Mitra', href: '/partner/pending', icon: FlaskConical },
+    : userRole === 'donation_partner'
+        ? [
+            { title: 'Scan Produk', href: '/partner/scan', icon: FlaskConical },
+            { title: 'Donasi Hari Ini', href: '/partner/donations/today', icon: HeartHandshake },
+            { title: 'Daftar Supermarket/Toko', href: '/partner/stores', icon: Store },
+            { title: 'Riwayat Donasi', href: '/partner/donations/history', icon: History },
         ]
-      : partnerRoles.includes(userRole ?? '')
-        ? [{ title: 'Status Akun Mitra', href: '/partner/pending', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }]
+        : userRole === 'umkm_partner'
+          ? [
+                { title: 'Diskon Tersedia', href: '/umkm/offers', icon: BadgePercent },
+                { title: 'Daftar Supermarket/Toko', href: '/umkm/stores', icon: Store },
+                { title: 'Riwayat Diskon', href: '/umkm/discount-history', icon: History },
+            ]
         : supermarketNavItems;
 
 const footerNavItems: NavItem[] = [

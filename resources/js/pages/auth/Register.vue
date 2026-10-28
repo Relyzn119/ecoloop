@@ -28,7 +28,7 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Daftar mitra EcoLoop" description="Daftarkan Yayasan penerima donasi, UMKM, atau bisnis pemberi donasi. Semua akun mitra menunggu persetujuan Admin EcoLoop.">
+    <AuthBase title="Daftar akun EcoLoop" description="Daftarkan Yayasan penerima donasi, UMKM penerima diskon, atau supermarket/toko pemberi donasi dan diskon. Akun menunggu persetujuan Admin EcoLoop.">
         <Head title="Daftar Mitra EcoLoop" />
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">
@@ -38,7 +38,7 @@ const submit = () => {
                     <select id="partner_type" v-model="form.partner_type" class="h-10 rounded-md border border-input bg-background px-3 text-sm">
                         <option value="foundation">Yayasan / Badan Amal — menerima produk donasi</option>
                         <option value="umkm">Mitra UMKM — menerima informasi produk diskon</option>
-                        <option value="business_owner">Pemilik Bisnis / Pemberi Donasi</option>
+                        <option value="business_owner">Supermarket / Toko — Pemberi Donasi & Diskon</option>
                     </select>
                     <InputError :message="form.errors.partner_type" />
                 </div>
@@ -48,7 +48,7 @@ const submit = () => {
                         :message="form.errors.organization_name"
                     />
                 </div>
-                <p class="sm:col-span-2 -mt-3 text-xs text-muted-foreground">Pendaftaran Yayasan, UMKM, dan Pemilik Bisnis/Pemberi Donasi akan berstatus menunggu sampai disetujui Admin EcoLoop.</p>
+                <p class="sm:col-span-2 -mt-3 text-xs text-muted-foreground">Yayasan menerima donasi, UMKM menerima informasi diskon, dan supermarket/toko mengelola dashboard operasional stok, batch, diskon, dan donasi setelah disetujui Admin EcoLoop. Pemilik dapat memberikan akses operasional kepada staf melalui akun manager/kasir.</p>
                 <div class="grid gap-2">
                     <Label for="name">Name</Label>
                     <Input id="name" type="text" required autofocus tabindex="1" autocomplete="name" v-model="form.name" placeholder="Full name" />

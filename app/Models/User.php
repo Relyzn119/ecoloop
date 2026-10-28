@@ -55,7 +55,7 @@ class User extends Authenticatable
     /** @param Builder<User> $query */
     public function scopeNotificationRecipients(Builder $query): Builder
     {
-        return $query->whereIn('role', ['manager', 'cashier']);
+        return $query->whereIn('role', ['business_owner', 'manager', 'cashier']);
     }
 
     /** Get the donation partner profile owned by this account. */
@@ -71,12 +71,11 @@ class User extends Authenticatable
             return 'admin.partners.index';
         }
 
-        if (in_array($this->role, ['donation_partner', 'umkm_partner', 'business_owner'], true)) {
+        if (in_array($this->role, ['donation_partner', 'umkm_partner'], true)) {
             return $this->donationPartner?->is_active
                 ? match ($this->role) {
                     'umkm_partner' => 'umkm.offers',
                     'donation_partner' => 'partner.scan',
-                    'business_owner' => 'business-owner.inventory',
                     default => 'partner.pending',
                 }
             : 'partner.pending';

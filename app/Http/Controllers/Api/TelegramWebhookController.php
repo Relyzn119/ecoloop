@@ -114,7 +114,7 @@ class TelegramWebhookController extends Controller
                 if (preg_match('/^\/(?:start|id)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
                     $telegram->sendMessage(
                         $chatId,
-                        "Halo! Saya EcoLoop AI, asisten generatif EcoLoop. Chat ID Anda: {$chatId}. Hubungkan ID ini ke akun EcoLoop: manager/kasir melalui Settings → Profile, atau mitra melalui pendaftaran/data mitra. Setelah terhubung, kirim pertanyaan langsung di sini. Gunakan /help untuk panduan role dan /reset untuk memulai ulang percakapan."
+                        "Halo! Saya EcoLoop AI, asisten generatif EcoLoop. Chat ID Anda: {$chatId}. Hubungkan ID ini ke akun EcoLoop: pemilik bisnis/manager/kasir melalui Settings → Profile, atau mitra melalui pendaftaran/data mitra. Setelah terhubung, kirim pertanyaan langsung di sini. Gunakan /help untuk panduan role dan /reset untuk memulai ulang percakapan."
                     );
 
                     return response()->json(['ok' => true]);
@@ -173,7 +173,7 @@ class TelegramWebhookController extends Controller
                 $telegram->answerCallback((string) $update['callback_query']['id'], 'Could not process. Check role and pending status.');
             } elseif ($chatId !== null && isset($update['message'])) {
                 try {
-                    $telegram->sendMessage($chatId, 'EcoLoop tidak dapat memproses pesan ini. Pastikan Chat ID terhubung ke akun EcoLoop dan coba lagi. Untuk persetujuan diskon, hanya manager/kasir yang dapat memutuskan permintaan yang masih pending.');
+                    $telegram->sendMessage($chatId, 'EcoLoop tidak dapat memproses pesan ini. Pastikan Chat ID terhubung ke akun EcoLoop dan coba lagi. Untuk persetujuan diskon, pemilik bisnis/manager/kasir dapat memutuskan permintaan yang masih pending.');
                 } catch (Throwable) {
                     // Telegram delivery will be retried through the notification queue for outgoing alerts.
                 }

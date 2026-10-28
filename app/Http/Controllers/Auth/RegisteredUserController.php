@@ -53,6 +53,7 @@ class RegisteredUserController extends Controller
                     'business_owner' => 'business_owner',
                     default => 'donation_partner',
                 },
+                'telegram_chat_id' => $validated['partner_type'] === 'business_owner' ? $validated['telegram_chat_id'] : null,
                 'password' => Hash::make($validated['password']),
             ]);
 

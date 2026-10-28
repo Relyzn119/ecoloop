@@ -21,10 +21,10 @@ Route::middleware(['auth', 'role:donation_partner,umkm_partner,business_owner'])
     Route::get('partner/pending', [PartnerPortalController::class, 'pending'])->name('partner.pending');
 });
 
-Route::middleware(['auth', 'verified', 'role:business_owner', 'partner.active'])->prefix('business-owner')->name('business-owner.')->group(function () {
-    Route::get('inventory', [ProductController::class, 'index'])->name('inventory');
-    Route::post('inventory/{product}/batches', [ProductController::class, 'addBatch'])->name('inventory.add-batch');
-});
+// Keep legacy business-owner inventory URLs working after this role moves to the supermarket dashboard.
+Route::middleware(['auth', 'verified', 'role:business_owner', 'partner.active'])
+    ->get('business-owner/inventory', fn () => to_route('inventory.index'))
+    ->name('business-owner.inventory');
 
 Route::middleware(['auth', 'verified', 'role:ecoloop_admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('partners', [AdminPartnerManagementController::class, 'index'])->name('partners.index');
@@ -35,15 +35,20 @@ Route::middleware(['auth', 'verified', 'role:ecoloop_admin'])->prefix('admin')->
 
 Route::middleware(['auth', 'role:umkm_partner', 'partner.active'])->prefix('umkm')->name('umkm.')->group(function () {
     Route::get('offers', [PartnerPortalController::class, 'offers'])->name('offers');
+    Route::get('stores', [PartnerPortalController::class, 'stores'])->name('stores');
+    Route::get('discount-history', [PartnerPortalController::class, 'history'])->name('discount-history');
 });
 
 Route::middleware(['auth', 'role:donation_partner', 'partner.active'])->prefix('partner')->name('partner.')->group(function () {
+    Route::get('donations/today', [PartnerPortalController::class, 'donationToday'])->name('donations.today');
+    Route::get('stores', [PartnerPortalController::class, 'stores'])->name('stores');
+    Route::get('donations/history', [PartnerPortalController::class, 'history'])->name('donations.history');
     Route::get('scan', [PartnerPortalController::class, 'scan'])->name('scan');
     Route::post('scan/analyze', [PartnerPortalController::class, 'analyze'])->name('scan.analyze');
     Route::post('scan/claim', [PartnerPortalController::class, 'claim'])->name('scan.claim');
 });
 
-Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function () {
+Route::middleware(['auth', 'verified', 'role:manager,cashier,business_owner', 'partner.active'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Product Inventory Management CRUD & Manual Overrides
@@ -51,6 +56,7 @@ Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function 
     Route::get('inventory/sync-history', [InventorySyncHistoryController::class, 'index'])->name('inventory.sync-history');
     Route::get('inventory/create', [ProductController::class, 'create'])->name('inventory.create');
     Route::post('inventory', [ProductController::class, 'store'])->name('inventory.store');
+    Route::post('inventory/{product}/batches', [ProductController::class, 'addBatch'])->name('inventory.add-batch');
     Route::post('inventory/auto-sync/toggle', [ProductController::class, 'toggleAutoSync'])->name('inventory.auto-sync.toggle');
     Route::post('inventory/auto-sync/run', [ProductController::class, 'syncNow'])->name('inventory.auto-sync.run');
     Route::get('inventory/{product}/edit', [ProductController::class, 'edit'])->name('inventory.edit');

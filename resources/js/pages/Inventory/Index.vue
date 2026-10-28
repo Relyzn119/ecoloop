@@ -134,13 +134,11 @@ const props = defineProps<{
 }>();
 
 const isBusinessOwner = computed(() => props.is_business_owner === true);
-const inventoryBasePath = computed(() => isBusinessOwner.value ? '/business-owner/inventory' : '/inventory');
-const breadcrumbs = computed<BreadcrumbItem[]>(() => isBusinessOwner.value
-    ? [{ title: 'Inventaris Bisnis', href: '/business-owner/inventory' }]
-    : [
-          { title: 'Dashboard', href: '/dashboard' },
-          { title: 'Inventory', href: '/inventory' },
-      ]);
+const inventoryBasePath = computed(() => '/inventory');
+const breadcrumbs = computed<BreadcrumbItem[]>(() => [
+    { title: 'Dashboard', href: '/dashboard' },
+    { title: 'Inventory', href: '/inventory' },
+]);
 
 const page = usePage();
 const flashSuccess = computed(() => (page.props as any).flash?.success);
@@ -505,13 +503,12 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                     </h1>
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">
                         {{ isBusinessOwner
-                            ? 'Tambahkan stok produk secara manual. Setiap penerimaan dibuat sebagai batch terpisah dengan tanggal kedaluwarsa sendiri.'
+                            ? 'Kelola inventaris supermarket, penerimaan batch, sinkronisasi, diskon, dan donasi.'
                             : 'Track stock levels, real-time expiration urgency, and execute manual markdown or donation overrides.' }}
                     </p>
                 </div>
                 <div class="flex items-center gap-2.5">
                     <Link
-                        v-if="!isBusinessOwner"
                         href="/inventory/create"
                         class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:bg-emerald-700"
                     >
@@ -521,7 +518,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                 </div>
             </div>
 
-            <section v-if="!isBusinessOwner" class="flex flex-col gap-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <section class="flex flex-col gap-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 class="font-semibold text-neutral-900 dark:text-neutral-100">Supermarket Central Sync</h2>
@@ -862,7 +859,6 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                         </button>
                                         <!-- Apply Discount Modal Trigger -->
                                         <button
-                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Apply Markdown Discount"
                                             :disabled="product.status === 'donated' || product.status === 'disposed' || product.status === 'sold_out'"
@@ -875,7 +871,6 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Reserve Donation Modal Trigger -->
                                         <button
-                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Reserve for Donation"
                                             :disabled="
@@ -893,7 +888,6 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Edit Item -->
                                         <Link
-                                            v-if="!isBusinessOwner"
                                             :href="`/inventory/${product.id}/edit`"
                                             title="Edit Item"
                                             class="inline-flex items-center rounded-md border border-neutral-200 bg-white p-1 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white"
@@ -903,7 +897,6 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Delete Item -->
                                         <button
-                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Delete Item"
                                             class="inline-flex items-center rounded-md border border-neutral-200 bg-white p-1 text-neutral-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-red-500/20"
@@ -1024,7 +1017,6 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                                 Clear filters
                                             </button>
                                             <Link
-                                                v-if="!isBusinessOwner"
                                                 href="/inventory/create"
                                                 class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
                                             >

@@ -15,8 +15,8 @@ class DiscountApprovalService
 {
     public function decide(int $approvalId, User $user, string $decision, ?int $percentage = null): DiscountApproval
     {
-        if (! in_array($user->role, ['manager', 'cashier'], true)) {
-            throw new AuthorizationException('Only a manager or cashier may decide discount approvals.');
+        if (! in_array($user->role, ['business_owner', 'manager', 'cashier'], true)) {
+            throw new AuthorizationException('Only a business owner, manager, or cashier may decide discount approvals.');
         }
 
         if (! in_array($decision, ['approve', 'reject'], true)) {

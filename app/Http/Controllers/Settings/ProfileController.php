@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,13 +31,28 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $validated = $request->validated();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
-        }
+        DB::transaction(function () use ($user, $validated): void {
+            $user->fill($validated);
 
-        $request->user()->save();
+            if ($user->isDirty('email')) {
+                $user->email_verified_at = null;
+            }
+
+            $user->save();
+
+            if ($user->role === 'business_owner' && $user->donationPartner) {
+                $user->donationPartner->update([
+                    'name' => $user->donationPartner->name ?: $user->name,
+                    'contact_person' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'telegram_chat_id' => $user->telegram_chat_id,
+                ]);
+            }
+        });
 
         return to_route('profile.edit');
     }

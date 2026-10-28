@@ -9,6 +9,7 @@ use App\Models\InventorySyncRun;
 use App\Models\InventorySyncSetting;
 use App\Models\Product;
 use App\Models\ProductBatch;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
@@ -255,31 +256,11 @@ class CentralInventorySyncService
         $syncResult = $this->synchronize(force: true, trigger: 'sync_now');
         $partners = DonationPartner::query()->active()->where('partner_type', 'foundation')->orderBy('id')->get();
 
-        if ($partners->isEmpty()) {
-            $details = $this->appendDemoAuditDetails(
-                (int) $syncResult['sync_run_id'],
-                [],
-                [],
-                [],
-                0,
-                0,
-                'No active donation partner is configured.'
-            );
-
-            return [
-                ...$syncResult,
-                'details' => $details,
-                'demo_donated_products' => 0,
-                'demo_donated_units' => 0,
-                'demo_partner_count' => 0,
-                'demo_expected_products' => 0,
-                'demo_donation_error' => 'No active donation partner is configured.',
-            ];
-        }
-
         $demoBatchCount = max(3, $partners->count());
         $catalog = collect(self::CATALOG);
-        $demoStock = DB::transaction(function () use ($catalog, $demoBatchCount): array {
+        $discountBatchCount = random_int(2, 4);
+        $preAlertBatchCount = random_int(2, 4);
+        $demoStock = DB::transaction(function () use ($catalog, $demoBatchCount, $discountBatchCount, $preAlertBatchCount): array {
             $batches = [];
             $receiptEvents = [];
             $newProducts = 0;
@@ -302,7 +283,21 @@ class CentralInventorySyncService
                 $receiptEvents[] = $this->stockEvent('demo_received', $product, $batch, $quantity, $stockBefore, $stockBefore + $quantity);
             }
 
-            return ['batches' => $batches, 'new_products' => $newProducts, 'receipt_events' => $receiptEvents];
+            $discountBatches = $this->createDemoScenarioBatches($catalog, $discountBatchCount, 4, 6, 'demo_discount_candidate');
+            $preAlertBatches = $this->createDemoScenarioBatches($catalog, $preAlertBatchCount, 3, 3, 'demo_donation_prealert');
+            $allBatches = [...$batches, ...$discountBatches['batches'], ...$preAlertBatches['batches']];
+
+            foreach (array_unique(array_map(fn (ProductBatch $batch): int => $batch->product_id, $allBatches)) as $productId) {
+                app(InventoryService::class)->refreshProductStockSummary($productId);
+            }
+
+            return [
+                'batches' => $batches,
+                'discount_batches' => $discountBatches['batches'],
+                'prealert_batches' => $preAlertBatches['batches'],
+                'new_products' => $newProducts + $discountBatches['new_products'] + $preAlertBatches['new_products'],
+                'receipt_events' => [...$receiptEvents, ...$discountBatches['receipt_events'], ...$preAlertBatches['receipt_events']],
+            ];
         });
 
         $approvalService = app(ExpiringDonationApprovalService::class);
@@ -329,16 +324,72 @@ class CentralInventorySyncService
             }
         }
 
+        $discountEvents = [];
+        foreach ($demoStock['discount_batches'] as $batch) {
+            $approval = DiscountApproval::query()->firstOrCreate(
+                ['product_batch_id' => $batch->id, 'status' => 'pending'],
+                [
+                    'product_id' => $batch->product_id,
+                    'recommended_percentage' => $percentage = random_int(20, 40),
+                    'recommended_price' => round((float) $batch->original_price * (1 - ($percentage / 100)), 2),
+                    'reasoning' => 'Demo Sync Now: batch simulasi kedaluwarsa 4–6 hari; menunggu persetujuan diskon manager.',
+                ]
+            );
+            if ($approval->wasRecentlyCreated) {
+                app(NotificationService::class)->queueDiscountApproval($approval);
+            }
+            $discountEvents[] = [
+                'batch_id' => $batch->id,
+                'batch_code' => $batch->batch_code,
+                'product_id' => $batch->product_id,
+                'product_name' => $batch->product->name,
+                'quantity_available' => $batch->quantity_available,
+                'unit' => $batch->product->unit,
+                'expiration_date' => $batch->expiration_date->toDateString(),
+                'approval_id' => $approval->id,
+                'recommended_percentage' => $approval->recommended_percentage,
+                'recommended_price' => (float) $approval->recommended_price,
+                'status' => $approval->status,
+                'demo' => true,
+            ];
+        }
+
+        $preAlertEvents = [];
+        foreach ($demoStock['prealert_batches'] as $batch) {
+            $managerCount = $approvalService->createApprovalForBatch(
+                $batch,
+                true,
+                'Demo Sync Now: batch simulasi kedaluwarsa 3 hari; notifikasi awal untuk konfirmasi donasi besok.',
+                [
+                    'provider' => 'fallback',
+                    'reasoning' => 'Demo pre-alert: batch kedaluwarsa tepat 3 hari lagi, tinjau untuk donasi besok.',
+                    'recommended_donation_quantity' => $batch->quantity_available,
+                ]
+            );
+            $preAlertEvents[] = [
+                'batch_id' => $batch->id,
+                'batch_code' => $batch->batch_code,
+                'product_id' => $batch->product_id,
+                'product_name' => $batch->product->name,
+                'quantity_available' => $batch->quantity_available,
+                'unit' => $batch->product->unit,
+                'expiration_date' => $batch->expiration_date->toDateString(),
+                'manager_actions' => $managerCount,
+            ];
+        }
+
         $demoReceivedUnits = (int) collect($demoStock['receipt_events'])->sum('quantity');
         $summary = [
             'new_products' => (int) ($syncResult['new_products'] ?? 0),
-            'new_batches' => (int) ($syncResult['new_batches'] ?? 0) + count($demoStock['batches']),
+            'new_batches' => (int) ($syncResult['new_batches'] ?? 0) + count($demoStock['receipt_events']),
             'received_units' => (int) ($syncResult['received_units'] ?? 0) + $demoReceivedUnits,
             'demo_received_units' => $demoReceivedUnits,
             'sales_transactions' => (int) ($syncResult['sales_transactions'] ?? 0),
             'sold_units' => (int) ($syncResult['sold_units'] ?? 0),
             'changed_products' => (int) ($syncResult['changed_products'] ?? 0),
             'demo_new_products' => $demoStock['new_products'],
+            'demo_discount_products' => count($discountEvents),
+            'donation_prealerts_pending' => count(array_filter($preAlertEvents, fn (array $event): bool => $event['manager_actions'] > 0)),
             'demo_donated_products' => 0,
             'demo_donated_units' => 0,
             'demo_partner_count' => $partners->count(),
@@ -347,20 +398,37 @@ class CentralInventorySyncService
             'donated_units' => 0,
         ];
 
-        $donationError = count($approvalEvents) < $demoBatchCount
-            ? 'No manager/cashier Telegram approval requests could be created. Link manager Telegram chat IDs and ensure at least one active foundation partner.'
-            : null;
+        $donationError = $partners->isEmpty()
+            ? 'No active foundation partner is configured; demo inventory candidates were created, but donation approvals could not be issued.'
+            : (count($approvalEvents) < $demoBatchCount
+                ? 'No manager/cashier Telegram approval requests could be created. Link manager Telegram chat IDs and ensure at least one active foundation partner.'
+                : null);
         $details = $this->appendDemoAuditDetails(
             (int) $syncResult['sync_run_id'],
             $demoStock['receipt_events'],
             [],
-            array_map(fn (ProductBatch $batch): int => $batch->product_id, $demoStock['batches']),
+            array_map(
+                fn (ProductBatch $batch): int => $batch->product_id,
+                [...$demoStock['batches'], ...$demoStock['discount_batches'], ...$demoStock['prealert_batches']]
+            ),
             (int) $summary['demo_new_products'],
             (int) $summary['demo_donated_units'],
             $donationError,
             $summary,
             $approvalEvents,
+            $preAlertEvents,
         );
+        $details['events']['discount_approvals'] = $discountEvents;
+        $details['discount_recommendations'] = collect([
+            ...($details['discount_recommendations'] ?? []),
+            ...$discountEvents,
+        ])->keyBy('batch_code')->values()->all();
+        $run = InventorySyncRun::query()->findOrFail((int) $syncResult['sync_run_id']);
+        $runSummary = $run->summary ?? [];
+        $runSummary['demo_discount_products'] = count($discountEvents);
+        $runSummary['donation_prealerts_pending'] = count(array_filter($preAlertEvents, fn (array $event): bool => $event['manager_actions'] > 0));
+        $run->update(['summary' => $runSummary, 'details' => $details]);
+        InventorySyncSetting::query()->findOrFail(1)->update(['last_sync_summary' => $runSummary]);
 
         return [
             ...$syncResult,
@@ -372,6 +440,8 @@ class CentralInventorySyncService
             'demo_expected_products' => $demoBatchCount,
             'demo_approval_actions' => $approvalActionCount,
             'demo_pending_products' => count($approvalEvents),
+            'demo_discount_products' => count($discountEvents),
+            'demo_prealert_products' => count($preAlertEvents),
             'demo_donation_error' => $donationError,
         ];
     }
@@ -454,6 +524,7 @@ class CentralInventorySyncService
      * @param  list<int>  $demoProductIds
      * @param  array<string, int>|null  $summaryOverrides
      * @param  list<array<string, mixed>>  $approvalEvents
+     * @param  list<array<string, mixed>>  $preAlertEvents
      * @return array<string, mixed>
      */
     private function appendDemoAuditDetails(
@@ -466,6 +537,7 @@ class CentralInventorySyncService
         ?string $donationError,
         ?array $summaryOverrides = null,
         array $approvalEvents = [],
+        array $preAlertEvents = [],
     ): array {
         $run = InventorySyncRun::query()->findOrFail($runId);
         $details = $run->details ?? [];
@@ -473,6 +545,7 @@ class CentralInventorySyncService
         $events['demo_received'] = [...($events['demo_received'] ?? []), ...$receivedEvents];
         $events['donated'] = [...($events['donated'] ?? []), ...$donationEvents];
         $events['donation_approvals'] = [...($events['donation_approvals'] ?? []), ...$approvalEvents];
+        $events['donation_prealerts'] = [...($events['donation_prealerts'] ?? []), ...$preAlertEvents];
         $details['events'] = $events;
 
         $productIds = array_values(array_unique([
@@ -498,8 +571,9 @@ class CentralInventorySyncService
         if ($summaryOverrides === null) {
             $summary['donated_units'] = (int) ($summary['donated_units'] ?? 0) + $donatedUnits;
         }
-        $summary['demo_expected_products'] = count($receivedEvents);
+        $summary['demo_expected_products'] = (int) ($summary['demo_expected_products'] ?? count($receivedEvents));
         $summary['donation_approvals_pending'] = count($approvalEvents);
+        $summary['donation_prealerts_pending'] = count(array_filter($preAlertEvents, fn (array $event): bool => $event['manager_actions'] > 0));
         $summary['discount_recommendations'] = count($details['discount_recommendations']);
         $summary['updated_product_rows'] = count($details['updated_products']);
         $summary['changed_products'] = count($details['updated_products']);
@@ -509,6 +583,36 @@ class CentralInventorySyncService
         InventorySyncSetting::query()->findOrFail(1)->update(['last_sync_summary' => $summary]);
 
         return $details;
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $catalog
+     * @return array{batches: list<ProductBatch>, new_products: int, receipt_events: list<array<string, mixed>>}
+     */
+    private function createDemoScenarioBatches($catalog, int $count, int $minDays, int $maxDays, string $scenario): array
+    {
+        $batches = [];
+        $receiptEvents = [];
+        $newProducts = 0;
+
+        foreach ($catalog->shuffle()->take($count) as $item) {
+            $product = Product::query()->where('external_id', $item['external_id'])->first();
+            if (! $product) {
+                $product = $this->createCentralProduct($item);
+                $newProducts++;
+            }
+
+            $quantity = random_int(4, 15);
+            $stockBefore = (int) ProductBatch::query()->where('product_id', $product->id)->sum('quantity_available');
+            $batch = $this->receiveCentralBatch($product, $quantity, random_int($minDays, $maxDays));
+            $batches[] = $batch;
+            $receiptEvents[] = [
+                ...$this->stockEvent($scenario, $product, $batch, $quantity, $stockBefore, $stockBefore + $quantity),
+                'scenario' => $scenario,
+            ];
+        }
+
+        return ['batches' => $batches, 'new_products' => $newProducts, 'receipt_events' => $receiptEvents];
     }
 
     /**
@@ -554,7 +658,7 @@ class CentralInventorySyncService
             'quantity_available' => $quantity,
             'quantity_donated' => 0,
             'quantity_sold' => 0,
-            'expiration_date' => now()->addDays($daysUntilExpiry ?? random_int(8, 60))->toDateString(),
+            'expiration_date' => now('Asia/Jakarta')->addDays($daysUntilExpiry ?? random_int(8, 60))->toDateString(),
             'original_price' => $product->original_price,
             'discount_price' => null,
             'status' => 'active',

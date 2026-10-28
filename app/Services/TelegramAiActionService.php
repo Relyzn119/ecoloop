@@ -15,8 +15,8 @@ class TelegramAiActionService
 
     public function decide(string $actionId, User $user, string $chatId, string $decision): string
     {
-        if (! in_array($user->role, ['manager', 'cashier'], true)) {
-            throw new AuthorizationException('Only managers and cashiers may confirm inventory actions.');
+        if (! in_array($user->role, ['business_owner', 'manager', 'cashier'], true)) {
+            throw new AuthorizationException('Only a business owner, manager, or cashier may confirm inventory actions.');
         }
 
         if (! in_array($decision, ['confirm', 'cancel', 'reduce', 'keep'], true)) {
@@ -287,8 +287,8 @@ class TelegramAiActionService
 
     private function authorizedDonationAction(string $actionId, User $user, string $chatId): TelegramAiAction
     {
-        if (! in_array($user->role, ['manager', 'cashier'], true)) {
-            throw new AuthorizationException('Only managers and cashiers may confirm donations.');
+        if (! in_array($user->role, ['business_owner', 'manager', 'cashier'], true)) {
+            throw new AuthorizationException('Only a business owner, manager, or cashier may confirm donations.');
         }
 
         $action = TelegramAiAction::query()->findOrFail($actionId);

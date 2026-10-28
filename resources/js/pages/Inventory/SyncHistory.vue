@@ -17,6 +17,7 @@ interface SyncEvent {
     stock_change: number;
     expiration_date: string;
     store_code: string | null;
+    scenario?: string;
     partner_name?: string;
     notifications_queued?: boolean;
 }
@@ -31,6 +32,7 @@ interface DiscountRecommendation {
     recommended_percentage: number;
     recommended_price: number;
     status: string;
+    demo?: boolean;
 }
 
 interface ProductSnapshot {
@@ -53,6 +55,8 @@ interface DonationApprovalEvent {
     manager_actions: number;
 }
 
+interface DonationPreAlertEvent extends DonationApprovalEvent {}
+
 interface SyncRun {
     id: number;
     trigger_type: 'auto' | 'sync_now' | 'manual_cli';
@@ -62,7 +66,7 @@ interface SyncRun {
     summary: Record<string, number | string>;
     error_message: string | null;
     details: {
-        events?: { received?: SyncEvent[]; sold?: SyncEvent[]; demo_received?: SyncEvent[]; donated?: SyncEvent[]; donation_approvals?: DonationApprovalEvent[] };
+        events?: { received?: SyncEvent[]; sold?: SyncEvent[]; demo_received?: SyncEvent[]; donated?: SyncEvent[]; donation_approvals?: DonationApprovalEvent[]; donation_prealerts?: DonationPreAlertEvent[]; discount_approvals?: DiscountRecommendation[] };
         updated_products?: ProductSnapshot[];
         discount_recommendations?: DiscountRecommendation[];
         skip_reason?: string;
@@ -125,6 +129,7 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 <span class="rounded-full bg-orange-500/10 px-2.5 py-1 font-medium text-orange-800 dark:text-orange-200">−{{ run.summary.sold_units || 0 }} terjual</span>
                                 <span class="rounded-full bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-800 dark:text-emerald-200">{{ run.summary.donated_units || 0 }} didonasikan</span>
                                 <span class="rounded-full bg-amber-500/10 px-2.5 py-1 font-medium text-amber-800 dark:text-amber-200">{{ run.summary.donation_approvals_pending || 0 }} menunggu konfirmasi</span>
+                                <span v-if="run.summary.donation_prealerts_pending" class="rounded-full bg-amber-500/10 px-2.5 py-1 font-medium text-amber-800 dark:text-amber-200">{{ run.summary.donation_prealerts_pending }} pre-alert donasi besok</span>
                                 <span class="rounded-full bg-violet-500/10 px-2.5 py-1 font-medium text-violet-800 dark:text-violet-200">{{ run.summary.discount_recommendations || 0 }} rekomendasi diskon</span>
                             </div>
                         </summary>
@@ -148,7 +153,7 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 <h3 class="flex items-center gap-2 text-sm font-semibold"><ArrowUpRight class="size-4 text-sky-700" /> Stok masuk dari sinkronisasi</h3>
                                 <div v-for="event in [...(run.details.events?.received || []), ...(run.details.events?.demo_received || [])]" :key="`in-${event.batch_code}`" class="rounded-lg bg-sky-500/5 p-3 text-sm">
                                     <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-semibold">{{ event.product_name }} <span class="font-normal text-muted-foreground">· {{ event.sku }} · Batch {{ event.batch_code }}</span></p><span class="font-semibold text-sky-800 dark:text-sky-200">+{{ formatQuantity(event.quantity, event.unit) }}</span></div>
-                                    <p class="mt-1 text-xs text-muted-foreground">Stok {{ formatQuantity(event.stock_before, event.unit) }} → {{ formatQuantity(event.stock_after, event.unit) }} · Exp {{ event.expiration_date }} · Toko {{ event.store_code || '—' }}</p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Stok {{ formatQuantity(event.stock_before, event.unit) }} → {{ formatQuantity(event.stock_after, event.unit) }} · Exp {{ event.expiration_date }} · Toko {{ event.store_code || '—' }}<span v-if="event.scenario === 'demo_discount_candidate'"> · Batch demo untuk uji persetujuan diskon</span><span v-else-if="event.scenario === 'demo_donation_prealert'"> · Batch demo pre-alert donasi (3 hari lagi)</span></p>
                                 </div>
                             </section>
 
@@ -177,10 +182,19 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 </div>
                             </section>
 
+                            <section v-if="run.details.events?.donation_prealerts?.length" class="space-y-2">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold"><Clock3 class="size-4 text-amber-700" /> Pre-alert donasi untuk besok</h3>
+                                <div v-for="event in run.details.events.donation_prealerts" :key="'donation-prealert-' + event.batch_id" class="rounded-lg bg-amber-500/5 p-3 text-sm">
+                                    <p class="font-semibold">{{ event.product_name }} <span class="font-normal text-muted-foreground">· Batch {{ event.batch_code }}</span></p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Stok {{ formatQuantity(event.quantity_available, event.unit) }} · Kedaluwarsa {{ event.expiration_date }} (3 hari lagi) · {{ event.manager_actions }} notifikasi pre-alert.</p>
+                                    <p class="mt-1 text-xs font-medium text-amber-800 dark:text-amber-200">Belum didonasikan dan belum ada stok yang berubah. Persetujuan sekarang menjadwalkan donasi setelah masuk jendela 2 hari.</p>
+                                </div>
+                            </section>
+
                             <section v-if="run.details.discount_recommendations?.length" class="space-y-2">
                                 <h3 class="flex items-center gap-2 text-sm font-semibold"><Percent class="size-4 text-violet-700" /> Rekomendasi diskon menunggu persetujuan</h3>
                                 <div v-for="recommendation in run.details.discount_recommendations" :key="`discount-${recommendation.batch_code}`" class="rounded-lg bg-violet-500/5 p-3 text-sm">
-                                    <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-semibold">{{ recommendation.product_name }} <span class="font-normal text-muted-foreground">· {{ recommendation.sku }} · Batch {{ recommendation.batch_code }}</span></p><span class="font-semibold text-violet-800 dark:text-violet-200">{{ recommendation.recommended_percentage }}% · {{ new Intl.NumberFormat('id-ID').format(recommendation.recommended_price) }} / unit</span></div>
+                                    <div class="flex flex-wrap items-center justify-between gap-2"><p class="font-semibold">{{ recommendation.product_name }} <span class="font-normal text-muted-foreground">· {{ recommendation.sku }} · Batch {{ recommendation.batch_code }}</span><span v-if="recommendation.demo" class="ml-2 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700">Demo Sync Now</span></p><span class="font-semibold text-violet-800 dark:text-violet-200">{{ recommendation.recommended_percentage }}% · {{ new Intl.NumberFormat('id-ID').format(recommendation.recommended_price) }} / unit</span></div>
                                     <p class="mt-1 text-xs text-muted-foreground">{{ formatQuantity(recommendation.quantity_available, recommendation.unit) }} tersedia · Exp {{ recommendation.expiration_date }} · Status {{ recommendation.status }}</p>
                                 </div>
                             </section>

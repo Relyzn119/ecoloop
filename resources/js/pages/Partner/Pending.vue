@@ -14,7 +14,7 @@ defineProps<{
         <main class="mx-auto max-w-3xl space-y-6 p-6 lg:p-10">
             <section class="rounded-2xl border border-sidebar-border bg-card p-7 shadow-sm">
                 <div class="mb-5 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-700"><Clock3 class="size-6" /></div>
-                <p class="text-sm font-semibold uppercase tracking-wide text-emerald-700">{{ partner?.partner_type === 'umkm' ? 'Mitra UMKM EcoLoop' : partner?.partner_type === 'business_owner' ? 'Pemilik Bisnis / Pemberi Donasi' : 'Mitra Yayasan EcoLoop' }}</p>
+                <p class="text-sm font-semibold uppercase tracking-wide text-emerald-700">{{ partner?.partner_type === 'umkm' ? 'Mitra UMKM EcoLoop' : partner?.partner_type === 'business_owner' ? 'Supermarket / Toko — Pemberi Donasi & Diskon' : 'Mitra Yayasan EcoLoop' }}</p>
                 <h1 class="mt-2 text-2xl font-bold text-foreground">{{ partner?.name || 'Pendaftaran mitra' }}{{ partner?.is_active ? ' telah disetujui' : ' sedang menunggu persetujuan' }}</h1>
                 <p class="mt-3 text-sm leading-6 text-muted-foreground">
                     Admin EcoLoop akan memeriksa profil organisasi dan mengaktifkan akun. Produk dan fitur EcoLoop tidak dapat diakses
@@ -28,7 +28,7 @@ defineProps<{
                             :class="partner?.is_active ? 'text-emerald-600' : 'text-amber-600'"
                         />{{
                             partner?.is_active
-                            ? (partner?.partner_type === 'umkm' ? 'Akun telah disetujui. Buka menu Penawaran Diskon untuk melihat produk.' : partner?.partner_type === 'business_owner' ? 'Akun bisnis telah disetujui. Dashboard operasional supermarket tetap memakai akun manager/kasir.' : 'Akun telah disetujui. Buka menu Portal Mitra untuk mulai scan.')
+                            ? (partner?.partner_type === 'umkm' ? 'Akun telah disetujui. Buka menu Penawaran Diskon untuk melihat produk.' : partner?.partner_type === 'business_owner' ? 'Akun supermarket telah disetujui. Buka dashboard untuk mengelola inventaris, batch, donasi, dan diskon.' : 'Akun telah disetujui. Buka menu Portal Mitra untuk mulai scan.')
                                 : 'Persetujuan Admin EcoLoop masih menunggu.'
                         }}
                     </p>
