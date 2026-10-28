@@ -20,6 +20,7 @@ class DonationPartner extends Model
      */
     protected $fillable = [
         'name',
+        'partner_type',
         'contact_person',
         'phone',
         'email',
@@ -50,6 +51,12 @@ class DonationPartner extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    /** @param Builder<$this> $query */
+    public function scopeUmkm(Builder $query): Builder
+    {
+        return $query->where('partner_type', 'umkm');
     }
 
     /** Get the account that manages this donation partner profile. */

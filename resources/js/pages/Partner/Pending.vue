@@ -4,7 +4,7 @@ import { Head } from '@inertiajs/vue3';
 import { CheckCircle2, Clock3 } from 'lucide-vue-next';
 
 defineProps<{
-    partner: { name: string; is_active: boolean } | null;
+    partner: { name: string; partner_type: 'foundation' | 'umkm'; is_active: boolean } | null;
 }>();
 </script>
 
@@ -14,7 +14,7 @@ defineProps<{
         <main class="mx-auto max-w-3xl space-y-6 p-6 lg:p-10">
             <section class="rounded-2xl border border-sidebar-border bg-card p-7 shadow-sm">
                 <div class="mb-5 flex size-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-700"><Clock3 class="size-6" /></div>
-                <p class="text-sm font-semibold uppercase tracking-wide text-emerald-700">EcoLoop Donation Partner</p>
+                <p class="text-sm font-semibold uppercase tracking-wide text-emerald-700">{{ partner?.partner_type === 'umkm' ? 'Mitra UMKM EcoLoop' : 'Mitra Yayasan EcoLoop' }}</p>
                 <h1 class="mt-2 text-2xl font-bold text-foreground">{{ partner?.name || 'Pendaftaran mitra' }} sedang menunggu persetujuan</h1>
                 <p class="mt-3 text-sm leading-6 text-muted-foreground">
                     Manager akan memeriksa profil organisasi dan mengaktifkan akun sebelum portal scan dibuka. Produk supermarket tidak dapat diakses
@@ -28,7 +28,7 @@ defineProps<{
                             :class="partner?.is_active ? 'text-emerald-600' : 'text-amber-600'"
                         />{{
                             partner?.is_active
-                                ? 'Akun telah disetujui. Buka menu Portal Mitra untuk mulai scan.'
+                                ? (partner?.partner_type === 'umkm' ? 'Akun telah disetujui. Buka menu Penawaran Diskon untuk melihat produk.' : 'Akun telah disetujui. Buka menu Portal Mitra untuk mulai scan.')
                                 : 'Persetujuan manager masih menunggu.'
                         }}
                     </p>

@@ -16,7 +16,7 @@ import {
     RefreshCw,
     Tag,
 } from 'lucide-vue-next';
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 interface InventoryBatch {
     id: number;
@@ -120,6 +120,7 @@ let cameraStream: MediaStream | null = null;
 let currentPreviewUrl: string | null = null;
 const analysisForm = useForm<{ photo: File | null }>({ photo: null });
 const donationForm = useForm<{ review_token: string; partner_id: number | null }>({ review_token: '', partner_id: selectedPartnerId.value });
+let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const selectedDonationPartner = computed(() => props.donationPartners.find((partner) => partner.id === selectedPartnerId.value) ?? null);
 const availableUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_available, 0));
 const donatedUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_donated, 0));
@@ -129,7 +130,16 @@ const lastUpdatedLabel = computed(() =>
 
 onBeforeUnmount(() => {
     if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+    if (approvalRefreshTimer) clearInterval(approvalRefreshTimer);
     stopCamera();
+});
+
+onMounted(() => {
+    if (!isPartnerPortal.value) {
+        approvalRefreshTimer = setInterval(() => {
+            router.reload({ only: ['pendingApprovals'], preserveScroll: true });
+        }, 5000);
+    }
 });
 
 function refreshData(): void {
@@ -590,7 +600,7 @@ function donateReviewedPhoto(): void {
                         <Percent class="size-4 text-amber-600 dark:text-amber-400" />
                         <div>
                             <h2 class="font-semibold text-foreground">Discount recommendations</h2>
-                            <p class="text-xs text-muted-foreground">AI suggestions are pending; no price is changed until approval.</p>
+                            <p class="text-xs text-muted-foreground">Products expiring in 4–6 days are added automatically; prices stay unchanged until approval.</p>
                         </div>
                     </div>
                     <div v-if="pendingApprovals.length" class="divide-y divide-sidebar-border/60">
@@ -606,7 +616,7 @@ function donateReviewedPhoto(): void {
                             </div>
                             <p class="text-sm text-foreground">{{ approval.quantity }} units · expires {{ approval.expiration_date }}</p>
                             <p class="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                                AI recommendation: {{ approval.recommended_percentage }}% · {{ formatCurrency(approval.recommended_price) }}
+                                Recommended discount: {{ approval.recommended_percentage }}% · {{ formatCurrency(approval.recommended_price) }}
                             </p>
                             <p class="text-xs text-muted-foreground">{{ approval.reasoning }}</p>
                         </article>

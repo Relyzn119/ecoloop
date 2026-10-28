@@ -16,8 +16,12 @@ Route::get('/', function () {
         : Inertia::render('Welcome');
 })->name('home');
 
-Route::middleware(['auth', 'role:donation_partner'])->group(function () {
+Route::middleware(['auth', 'role:donation_partner,umkm_partner'])->group(function () {
     Route::get('partner/pending', [PartnerPortalController::class, 'pending'])->name('partner.pending');
+});
+
+Route::middleware(['auth', 'role:umkm_partner', 'partner.active'])->prefix('umkm')->name('umkm.')->group(function () {
+    Route::get('offers', [PartnerPortalController::class, 'offers'])->name('offers');
 });
 
 Route::middleware(['auth', 'role:donation_partner', 'partner.active'])->prefix('partner')->name('partner.')->group(function () {

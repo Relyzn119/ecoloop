@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DiscountApproval;
 use App\Models\User;
 use App\Services\DiscountApprovalService;
+use App\Services\TelegramAiChatService;
 use App\Services\TelegramBotService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,7 @@ use Throwable;
 
 class TelegramWebhookController extends Controller
 {
-    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram): JsonResponse
+    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat): JsonResponse
     {
         $secret = (string) config('services.telegram.webhook_secret');
         abort_unless($secret !== '' && hash_equals($secret, (string) $request->header('X-Telegram-Bot-Api-Secret-Token')), 403);
@@ -27,7 +28,7 @@ class TelegramWebhookController extends Controller
             'callback_query.message.chat.id' => ['required_with:callback_query', 'numeric'],
             'message' => ['sometimes', 'array'],
             'message.chat.id' => ['required_with:message', 'numeric'],
-            'message.text' => ['required_with:message', 'string', 'max:200'],
+            'message.text' => ['required_with:message', 'string', 'max:2000'],
         ]);
 
         $chatId = null;
@@ -73,8 +74,20 @@ class TelegramWebhookController extends Controller
                 if (preg_match('/^\/(?:start|id)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
                     $telegram->sendMessage(
                         $chatId,
-                        "EcoLoop bot connected. Your Telegram chat ID is {$chatId}. Copy this ID into the Telegram Chat ID field for this partner under Donation Partners in EcoLoop. Each partner needs the chat ID from its own Telegram account or group."
+                        "Halo! Saya EcoLoop AI, asisten generatif EcoLoop. Chat ID Anda: {$chatId}. Hubungkan ID ini ke akun EcoLoop: manager/kasir melalui Settings → Profile, atau mitra melalui pendaftaran/data mitra. Setelah terhubung, kirim pertanyaan langsung di sini. Gunakan /help untuk panduan role dan /reset untuk memulai ulang percakapan."
                     );
+
+                    return response()->json(['ok' => true]);
+                }
+
+                if (preg_match('/^\/help(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
+                    $telegram->sendMessage($chatId, $aiChat->help($chatId));
+
+                    return response()->json(['ok' => true]);
+                }
+
+                if (preg_match('/^\/reset(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
+                    $telegram->sendMessage($chatId, $aiChat->reset($chatId));
 
                     return response()->json(['ok' => true]);
                 }
@@ -86,6 +99,14 @@ class TelegramWebhookController extends Controller
 
                     return response()->json(['ok' => true, 'approval_id' => $approval->id]);
                 }
+
+                if (str_starts_with($text, '/')) {
+                    $telegram->sendMessage($chatId, $aiChat->help($chatId));
+
+                    return response()->json(['ok' => true]);
+                }
+
+                $telegram->sendMessage($chatId, $aiChat->reply($chatId, $text));
             }
         } catch (Throwable $exception) {
             Log::warning('Telegram update could not be processed.', [
@@ -97,7 +118,7 @@ class TelegramWebhookController extends Controller
                 $telegram->answerCallback((string) $update['callback_query']['id'], 'Could not process. Check role and pending status.');
             } elseif ($chatId !== null && isset($update['message'])) {
                 try {
-                    $telegram->sendMessage($chatId, 'EcoLoop could not process that action. Check that your Telegram chat ID is linked to a manager or cashier account and that the request is still pending.');
+                    $telegram->sendMessage($chatId, 'EcoLoop tidak dapat memproses pesan ini. Pastikan Chat ID terhubung ke akun EcoLoop dan coba lagi. Untuk persetujuan diskon, hanya manager/kasir yang dapat memutuskan permintaan yang masih pending.');
                 } catch (Throwable) {
                     // Telegram delivery will be retried through the notification queue for outgoing alerts.
                 }

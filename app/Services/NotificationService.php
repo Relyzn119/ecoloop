@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendDiscountApprovalNotifications;
 use App\Jobs\SendDonationNotifications;
+use App\Jobs\SendPartnerOfferNotifications;
 use App\Models\AgentLog;
 use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
@@ -42,7 +43,7 @@ class NotificationService
         $managerDetails = $this->buildManagerDonationSummary();
 
         $notificationPartners = $broadcastToActivePartners
-            ? DonationPartner::query()->active()->orderBy('id')->get()
+            ? DonationPartner::query()->active()->where('partner_type', 'foundation')->orderBy('id')->get()
             : collect([$partner]);
 
         foreach ($notificationPartners as $notificationPartner) {
@@ -134,7 +135,7 @@ class NotificationService
         $product = $approval->product;
         $batch = $approval->batch;
         $text = sprintf(
-            "Discount approval required\n%s (%s), batch %s\nStock: %d %s\nExpires: %s\nAI recommendation: %d%% (price %s)\nReason: %s\n\nChoose an action. For a custom rate, reply: /discount %d 25",
+            "Discount approval required\n%s (%s), batch %s\nStock: %d %s\nExpires: %s\nRecommended discount: %d%% (price %s)\nReason: %s\n\nChoose an action. For a custom rate, reply: /discount %d 25",
             $product->name,
             $product->sku,
             $batch->batch_code,
@@ -156,12 +157,59 @@ class NotificationService
                 'text' => $text,
                 'reply_markup' => $keyboard,
                 'product_id' => $product->id,
-            ], "approval:{$approval->id}:user:{$user->id}:telegram", true);
+            ], "approval:{$approval->id}:user:{$user->id}:telegram", 'approval');
+        }
+    }
+
+    /** Notify every active UMKM partner when a discount has been approved and is available. */
+    public function queueDiscountOffers(DiscountApproval $approval): void
+    {
+        $approval->loadMissing(['product', 'batch']);
+        $this->queueDiscountOffer(
+            $approval->product,
+            $approval->batch,
+            (int) $approval->approved_percentage,
+            'approval:'.$approval->id
+        );
+    }
+
+    public function queueDiscountOffer(Product $product, ProductBatch $batch, int $percentage, string $reference): void
+    {
+        $price = number_format((float) $batch->discount_price, 0, ',', '.');
+        $originalPrice = number_format((float) $batch->original_price, 0, ',', '.');
+        $text = sprintf(
+            "EcoLoop - Penawaran Bahan Baku Diskon\nProduk: %s (%s)\nDiskon: %d%%\nHarga awal: Rp %s / %s\nHarga diskon: Rp %s / %s\nStok tersedia: %d %s\nKedaluwarsa: %s\n\nProduk dapat dibeli oleh Mitra UMKM selama stok masih tersedia. Mohon hubungi supermarket untuk konfirmasi dan pengambilan.",
+            $product->name,
+            $product->sku,
+            max(0, min(100, $percentage)),
+            $originalPrice,
+            $product->unit,
+            $price,
+            $product->unit,
+            $batch->quantity_available,
+            $product->unit,
+            $batch->expiration_date->toDateString()
+        );
+
+        $partners = DonationPartner::query()->active()->umkm()->orderBy('id')->get();
+        foreach ($partners as $partner) {
+            $key = "discount-offer:{$reference}:partner:{$partner->id}";
+            $this->queueDelivery('discount_available', 'email', $partner->email, 'EcoLoop: bahan baku tersedia dengan harga diskon', [
+                'body' => "Halo {$partner->contact_person},\n\n{$text}\n\nEcoLoop",
+                'product_id' => $product->id,
+            ], "{$key}:email", 'partner_offer');
+
+            if (filled($partner->telegram_chat_id)) {
+                $this->queueDelivery('discount_available', 'telegram', $partner->telegram_chat_id, null, [
+                    'text' => $text,
+                    'product_id' => $product->id,
+                ], "{$key}:telegram", 'partner_offer');
+            }
         }
     }
 
     /** @param array<string, mixed> $payload */
-    private function queueDelivery(string $event, string $channel, string $recipient, ?string $subject, array $payload, string $key, bool $approval = false): void
+    private function queueDelivery(string $event, string $channel, string $recipient, ?string $subject, array $payload, string $key, string $deliveryType = 'donation'): void
     {
         $delivery = NotificationDelivery::query()->firstOrCreate(
             ['dedupe_key' => $key],
@@ -176,9 +224,11 @@ class NotificationService
         );
 
         if ($delivery->wasRecentlyCreated) {
-            $job = $approval
-                ? new SendDiscountApprovalNotifications($delivery->id)
-                : new SendDonationNotifications($delivery->id);
+            $job = match ($deliveryType) {
+                'approval' => new SendDiscountApprovalNotifications($delivery->id),
+                'partner_offer' => new SendPartnerOfferNotifications($delivery->id),
+                default => new SendDonationNotifications($delivery->id),
+            };
             dispatch($job->afterCommit());
         }
     }

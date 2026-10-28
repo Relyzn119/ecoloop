@@ -17,8 +17,38 @@ class PartnerPortalController extends Controller
     public function pending(Request $request): Response
     {
         return Inertia::render('Partner/Pending', [
-            'partner' => $request->user()->donationPartner?->only(['name', 'is_active']),
+            'partner' => $request->user()->donationPartner?->only(['name', 'partner_type', 'is_active']),
         ]);
+    }
+
+    public function offers(Request $request): Response
+    {
+        $partner = $request->user()->donationPartner;
+        abort_unless($partner?->isReadyForPortal() && $partner->partner_type === 'umkm', 403);
+
+        $offers = ProductBatch::query()
+            ->with('product:id,sku,name,unit')
+            ->where('status', 'discounted')
+            ->where('quantity_available', '>', 0)
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->orderBy('expiration_date')
+            ->paginate(20)
+            ->through(fn (ProductBatch $batch): array => [
+                'id' => $batch->id,
+                'product_name' => $batch->product->name,
+                'sku' => $batch->product->sku,
+                'unit' => $batch->product->unit,
+                'batch_code' => $batch->batch_code,
+                'quantity_available' => $batch->quantity_available,
+                'original_price' => (float) $batch->original_price,
+                'discount_price' => (float) $batch->discount_price,
+                'discount_percentage' => $batch->original_price > 0
+                    ? (int) round((1 - ((float) $batch->discount_price / (float) $batch->original_price)) * 100)
+                    : 0,
+                'expiration_date' => $batch->expiration_date->toDateString(),
+            ]);
+
+        return Inertia::render('Umkm/Offers', ['offers' => $offers]);
     }
 
     public function scan(Request $request): Response

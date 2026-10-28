@@ -9,6 +9,7 @@ import { Head, useForm } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
 
 const form = useForm({
+    partner_type: 'foundation',
     organization_name: '',
     name: '',
     email: '',
@@ -27,14 +28,22 @@ const submit = () => {
 </script>
 
 <template>
-    <AuthBase title="Daftar mitra donasi" description="Akun akan ditinjau manager sebelum portal scan dapat digunakan.">
-        <Head title="Daftar Mitra Donasi" />
+    <AuthBase title="Daftar mitra EcoLoop" description="Pilih Yayasan untuk menerima donasi atau UMKM untuk mendapatkan penawaran diskon.">
+        <Head title="Daftar Mitra EcoLoop" />
 
         <form @submit.prevent="submit" class="flex flex-col gap-6">
             <div class="auth-register-grid grid gap-5 sm:grid-cols-2">
                 <div class="grid gap-2">
-                    <Label for="organization_name">Nama organisasi / mitra</Label
-                    ><Input id="organization_name" required v-model="form.organization_name" placeholder="Contoh: Bank Pangan Sejahtera" /><InputError
+                    <Label for="partner_type">Jenis mitra</Label>
+                    <select id="partner_type" v-model="form.partner_type" class="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                        <option value="foundation">Yayasan / Badan Amal — menerima produk donasi</option>
+                        <option value="umkm">Mitra UMKM — menerima informasi produk diskon</option>
+                    </select>
+                    <InputError :message="form.errors.partner_type" />
+                </div>
+                <div class="grid gap-2">
+                    <Label for="organization_name">Nama organisasi / usaha</Label
+                    ><Input id="organization_name" required v-model="form.organization_name" :placeholder="form.partner_type === 'umkm' ? 'Contoh: Dapur Sejahtera' : 'Contoh: Yayasan Pangan Sejahtera'" /><InputError
                         :message="form.errors.organization_name"
                     />
                 </div>
@@ -49,7 +58,7 @@ const submit = () => {
                     ><Input id="telegram_chat_id" required v-model="form.telegram_chat_id" placeholder="Chat ID dari bot EcoLoop" /><InputError
                         :message="form.errors.telegram_chat_id"
                     />
-                    <p class="text-xs text-muted-foreground">Chat ID dipakai untuk pemberitahuan donasi setelah akun disetujui.</p>
+                    <p class="text-xs text-muted-foreground">Untuk mendapatkan Chat ID, buka Telegram dan tekan tombol Start pada bot EcoLoopPartner_Bot terlebih dahulu. Chat ID dipakai untuk notifikasi sesuai jenis mitra.</p>
                 </div>
 
                 <div class="grid gap-2">

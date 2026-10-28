@@ -26,6 +26,7 @@ import { computed, ref } from 'vue';
 interface PartnerItem {
     id: number;
     name: string;
+    partner_type?: 'foundation' | 'umkm';
     contact_person: string;
     phone: string;
     email: string;
@@ -431,7 +432,9 @@ const toggleStatus = (partner: PartnerItem) => {
                                             <p class="font-semibold text-neutral-900 dark:text-neutral-100">
                                                 {{ partner.name }}
                                             </p>
-                                            <p class="text-xs text-neutral-400">Partner ID #{{ partner.id }}</p>
+                                            <p class="text-xs text-neutral-500 dark:text-neutral-400">
+                                                {{ partner.partner_type === 'umkm' ? 'Mitra UMKM · penawaran diskon' : 'Yayasan / badan amal · donasi' }}
+                                            </p>
                                         </div>
                                     </div>
                                 </td>

@@ -46,6 +46,7 @@ class DonationPartnerController extends Controller
             ->through(fn (DonationPartner $partner) => [
                 'id' => $partner->id,
                 'name' => $partner->name,
+                'partner_type' => $partner->partner_type,
                 'contact_person' => $partner->contact_person,
                 'phone' => $partner->phone,
                 'email' => $partner->email,

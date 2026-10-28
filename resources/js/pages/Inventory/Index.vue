@@ -690,11 +690,8 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-neutral-200/80 dark:divide-neutral-800/80">
-                            <tr
-                                v-for="product in products.data"
-                                :key="product.id"
-                                class="transition-colors hover:bg-neutral-50/60 dark:hover:bg-neutral-800/40"
-                            >
+                            <template v-for="product in products.data" :key="product.id">
+                                <tr class="transition-colors hover:bg-neutral-50/60 dark:hover:bg-neutral-800/40">
                                 <!-- SKU & Item Name -->
                                 <td class="px-4 py-4 sm:px-6">
                                     <div class="flex flex-col">
@@ -930,6 +927,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                     </p>
                                 </td>
                             </tr>
+                            </template>
 
                             <!-- Empty State -->
                             <tr v-if="products.data.length === 0">

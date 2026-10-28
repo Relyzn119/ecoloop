@@ -67,10 +67,12 @@ class User extends Authenticatable
     /** Resolve the post-authentication destination for this account role. */
     public function landingRoute(): string
     {
-        if ($this->role !== 'donation_partner') {
-            return 'dashboard';
+        if (in_array($this->role, ['donation_partner', 'umkm_partner'], true)) {
+            return $this->donationPartner?->is_active
+                ? ($this->role === 'umkm_partner' ? 'umkm.offers' : 'partner.scan')
+                : 'partner.pending';
         }
 
-        return $this->donationPartner?->is_active ? 'partner.scan' : 'partner.pending';
+        return 'dashboard';
     }
 }

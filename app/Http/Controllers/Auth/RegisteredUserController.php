@@ -33,6 +33,7 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'partner_type' => ['required', 'string', 'in:foundation,umkm'],
             'organization_name' => ['required', 'string', 'max:200'],
             'name' => ['required', 'string', 'max:150'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:150', 'unique:'.User::class],
@@ -47,12 +48,13 @@ class RegisteredUserController extends Controller
                 'name' => $validated['name'],
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
-                'role' => 'donation_partner',
+                'role' => $validated['partner_type'] === 'umkm' ? 'umkm_partner' : 'donation_partner',
                 'password' => Hash::make($validated['password']),
             ]);
 
             $user->donationPartner()->create([
                 'name' => $validated['organization_name'],
+                'partner_type' => $validated['partner_type'],
                 'contact_person' => $validated['name'],
                 'phone' => $validated['phone'],
                 'email' => $validated['email'],

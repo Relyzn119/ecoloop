@@ -59,7 +59,7 @@ class InventoryService
             throw new InvalidArgumentException('Discount percentage must be greater than 0 and less than 100.');
         }
 
-        return DB::transaction(function () use ($productId, $discountPercentage, $reason) {
+        $product = DB::transaction(function () use ($productId, $discountPercentage, $reason) {
             /** @var Product $product */
             $product = Product::query()->lockForUpdate()->findOrFail($productId);
 
@@ -92,6 +92,17 @@ class InventoryService
 
             return $product->fresh(['category', 'agentLogs']);
         });
+
+        foreach ($product->batches()->where('status', 'discounted')->where('quantity_available', '>', 0)->get() as $batch) {
+            $this->notificationService->queueDiscountOffer(
+                $product,
+                $batch,
+                (int) round($discountPercentage),
+                'batch:'.$batch->id.':'.$batch->updated_at?->timestamp
+            );
+        }
+
+        return $product;
     }
 
     /** Create pending approvals without changing any batch or product price. */
@@ -372,7 +383,7 @@ class InventoryService
      * @param  int  $daysThreshold  Threshold in days to analyze
      * @return array<string, mixed>
      */
-    public function simulateAiEvaluation(int $daysThreshold = 3): array
+    public function simulateAiEvaluation(int $daysThreshold = 7): array
     {
         $expiring = $this->getExpiringProducts($daysThreshold);
         $actionsTaken = [];
@@ -444,7 +455,11 @@ class InventoryService
             $evaluationProduct->discount_price = $batch->discount_price;
 
             $decision = $aiAgentService->evaluateProduct($evaluationProduct, '9router');
-            if (($decision['provider'] ?? null) !== '9router') {
+            $daysRemaining = now()->startOfDay()->diffInDays($batch->expiration_date->startOfDay(), false);
+            $hasLiveAiDecision = ($decision['provider'] ?? null) === '9router';
+            $discountWindow = $daysRemaining > 3 && $daysRemaining < 7;
+
+            if (! $hasLiveAiDecision && ! $discountWindow) {
                 $processed[] = [
                     'batch_id' => $batch->id,
                     'action' => 'skipped',
@@ -454,8 +469,9 @@ class InventoryService
                 continue;
             }
 
-            $daysRemaining = now()->startOfDay()->diffInDays($batch->expiration_date->startOfDay(), false);
-            $reason = (string) ($decision['reasoning'] ?? 'AI evaluated the inventory batch.');
+            $reason = $hasLiveAiDecision
+                ? (string) ($decision['reasoning'] ?? 'AI evaluated the inventory batch.')
+                : '9Router did not return a live decision. EcoLoop created a 30% discount recommendation because this batch expires in '.$daysRemaining.' days; manager or cashier approval is required and the price is unchanged.';
 
             if ($daysRemaining <= 2) {
                 $partnerId = $decision['recommended_partner_id']
@@ -531,8 +547,14 @@ class InventoryService
                 continue;
             }
 
-            if ($daysRemaining >= 3 && $daysRemaining <= 7 && $decision['action'] === 'discount') {
-                $percentage = max(1, min(50, (int) round((float) $decision['discount_percentage'])));
+            if ($discountWindow) {
+                $aiRecommendedDiscount = $hasLiveAiDecision && ($decision['action'] ?? null) === 'discount';
+                $percentage = $aiRecommendedDiscount
+                    ? max(1, min(50, (int) round((float) ($decision['discount_percentage'] ?? 30))))
+                    : 30;
+                if (! $aiRecommendedDiscount && $hasLiveAiDecision) {
+                    $reason = 'EcoLoop policy created a 30% discount recommendation because this batch expires in '.$daysRemaining.' days. AI reasoning: '.$reason;
+                }
                 $price = round((float) $batch->original_price * (1 - ($percentage / 100)), 2);
 
                 $approval = DiscountApproval::query()->firstOrCreate(

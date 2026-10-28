@@ -9,6 +9,8 @@ import { FlaskConical, Handshake, HeartHandshake, LayoutGrid, Package, Percent, 
 import AppLogo from './AppLogo.vue';
 
 const page = usePage<{ auth: { user: { role: string } | null } }>();
+const partnerRoles = ['donation_partner', 'umkm_partner'];
+const userRole = page.props.auth.user?.role;
 const mainNavItems: NavItem[] = [
     {
         title: 'Dashboard',
@@ -41,10 +43,10 @@ const mainNavItems: NavItem[] = [
         icon: Settings,
     },
 ]
-    .filter((item) => page.props.auth.user?.role !== 'donation_partner' || item.title === 'Settings')
+    .filter((item) => !partnerRoles.includes(userRole ?? '') || item.title === 'Settings')
     .map((item) =>
-        page.props.auth.user?.role === 'donation_partner' && item.title === 'Settings'
-            ? { ...item, title: 'Portal Mitra', href: '/partner/scan', icon: FlaskConical }
+        partnerRoles.includes(userRole ?? '') && item.title === 'Settings'
+            ? { ...item, title: userRole === 'umkm_partner' ? 'Penawaran Diskon' : 'Portal Mitra', href: userRole === 'umkm_partner' ? '/umkm/offers' : '/partner/scan', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }
             : item,
     );
 
@@ -59,7 +61,7 @@ const footerNavItems: NavItem[] = [
         href: '/reports?type=discount',
         icon: Percent,
     },
-].filter(() => page.props.auth.user?.role !== 'donation_partner');
+].filter(() => !partnerRoles.includes(userRole ?? ''));
 </script>
 
 <template>

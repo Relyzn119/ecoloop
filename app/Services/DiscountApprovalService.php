@@ -76,6 +76,7 @@ class DiscountApprovalService
         });
 
         if ($approval->status === 'approved') {
+            app(NotificationService::class)->queueDiscountOffers($approval);
             app(N8nFinalEventService::class)->queue(
                 'discount.approved',
                 'discount-approval:'.$approval->id,
