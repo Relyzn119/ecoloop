@@ -9,8 +9,10 @@ use App\Models\AgentLog;
 use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
 use App\Models\NotificationDelivery;
+use App\Models\PartnerDonationClaim;
 use App\Models\Product;
 use App\Models\ProductBatch;
+use App\Models\TelegramAiAction;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -84,7 +86,7 @@ class NotificationService
     }
 
     /** Broadcast one manager-requested product donation to every active foundation partner. */
-    public function queueRequestedDonationAlerts(Product $product, array $allocations, string $reference): int
+    public function queueRequestedDonationAlerts(Product $product, array $allocations, string $reference, bool $stockReductionApplied = true): int
     {
         $quantity = (int) collect($allocations)->sum('quantity');
         $batchLines = collect($allocations)
@@ -97,12 +99,15 @@ class NotificationService
             ))
             ->implode("\n");
         $details = sprintf(
-            "EcoLoop - Donasi atas permintaan manager\nProduk: %s (%s)\nJumlah total: %d %s\nRincian stok:\n%s\n\nProduk donasi sudah bisa diambil di supermarket. Pengambilan paling lambat 3 jam sebelum toko tutup. Donation Partner dipersilakan berkoordinasi dan berbagi produk sesuai kebutuhan bersama.",
+            "EcoLoop - Donasi atas persetujuan manager\nProduk: %s (%s)\nJumlah total: %d %s\nRincian stok:\n%s\n\n%s\nProduk donasi sudah bisa diambil di supermarket. Pengambilan paling lambat 3 jam sebelum toko tutup. Donation Partner dipersilakan berkoordinasi dan berbagi produk sesuai kebutuhan bersama.",
             $product->name,
             $product->sku,
             $quantity,
             $product->unit,
-            $batchLines !== '' ? $batchLines : 'Rincian batch tidak tersedia.'
+            $batchLines !== '' ? $batchLines : 'Rincian batch tidak tersedia.',
+            $stockReductionApplied
+                ? 'Stok supermarket sudah dikurangi sesuai jumlah donasi.'
+                : 'Stok supermarket tidak dikurangi; penggantian stok telah dipilih sebagai penyesuaian.'
         );
         $managerDetails = $this->buildManagerDonationSummary();
 
@@ -138,6 +143,145 @@ class NotificationService
         }
 
         return $partners->count();
+    }
+
+    /** Queue one actionable near-expiry donation review to a manager Telegram account. */
+    public function queueDonationApproval(TelegramAiAction $action, ProductBatch $batch, bool $preAlert): void
+    {
+        $batch->loadMissing('product');
+        $product = $batch->product;
+        $payload = $action->payload ?? [];
+        $quantity = (int) ($payload['recommended_quantity'] ?? $batch->quantity_available);
+        $date = $batch->expiration_date->toDateString();
+        $text = sprintf(
+            "%s\n%s (%s), batch %s\nRekomendasi AI: %d %s\nStok tersedia: %d %s\nKedaluwarsa: %s\nAlasan: %s\n\nPilih jumlah rekomendasi, atur jumlah sendiri, atau batalkan donasi. Jika memilih jumlah sendiri, kirim: /donasi %s JUMLAH kurangi|tetap",
+            $preAlert ? 'EcoLoop: perkiraan donasi besok' : 'EcoLoop: persetujuan donasi diperlukan',
+            $product->name,
+            $product->sku,
+            $batch->batch_code,
+            $quantity,
+            $product->unit,
+            $batch->quantity_available,
+            $product->unit,
+            $date,
+            (string) ($payload['reasoning'] ?? 'Batch mendekati tanggal kedaluwarsa.'),
+            $action->id
+        );
+
+        $rows = [];
+        $suffix = ':'.$action->id;
+        if ($preAlert) {
+            $rows[] = [
+                ['text' => 'Setujui besok · kurangi stok', 'callback_data' => 'eco:donation:reduce'.$suffix],
+                ['text' => 'Setujui besok · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
+            ];
+            $rows[] = [
+                ['text' => 'Tentukan jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix],
+                ['text' => 'Tinjau besok', 'callback_data' => 'eco:donation:defer'.$suffix],
+            ];
+        } else {
+            $rows[] = [
+                ['text' => 'Donasi AI · kurangi stok', 'callback_data' => 'eco:donation:reduce'.$suffix],
+                ['text' => 'Donasi AI · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
+            ];
+            $rows[] = [['text' => 'Tentukan jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix]];
+        }
+        $rows[] = [['text' => 'Jangan donasikan batch ini', 'callback_data' => 'eco:donation:reject'.$suffix]];
+
+        $this->queueDelivery('donation_approval', 'telegram', $action->telegram_chat_id, null, [
+            'text' => $text,
+            'reply_markup' => ['inline_keyboard' => $rows],
+            'product_id' => $product->id,
+        ], 'donation-approval:'.$action->id.':'.($payload['stage'] ?? 'eligible').':'.($payload['notification_date'] ?? now('Asia/Jakarta')->toDateString()));
+    }
+
+    public function queueTelegramActionResult(string $chatId, string $text, string $reference): void
+    {
+        $this->queueDelivery('donation_approval_result', 'telegram', $chatId, null, ['text' => $text], $reference);
+    }
+
+    /** Notify the taking partner and ask managers how to reconcile the supermarket stock. */
+    public function queuePartnerDonationClaim(PartnerDonationClaim $claim): void
+    {
+        $claim->loadMissing(['batch.product', 'partner']);
+        $product = $claim->batch->product;
+        $partner = $claim->partner;
+        $text = sprintf(
+            "EcoLoop - Pengambilan donasi dari scan kamera\nMitra: %s\nProduk: %s (%s)\nBatch: %s\nJumlah diambil: %d %s\n\nMitra dapat mengambil produk ini di supermarket. Pengambilan paling lambat 3 jam sebelum toko tutup. Manager/kasir akan mengonfirmasi pencatatan stok secara terpisah.",
+            $partner->name,
+            $product->name,
+            $product->sku,
+            $claim->batch->batch_code,
+            $claim->quantity,
+            $claim->unit
+        );
+        $reference = 'partner-photo-claim:'.$claim->id;
+
+        $this->queueDelivery('partner_donation_claimed', 'email', $partner->email, 'EcoLoop: pengambilan donasi tercatat', [
+            'body' => "Halo {$partner->contact_person},\n\n{$text}\n\nEcoLoop Agent",
+            'product_id' => $product->id,
+        ], $reference.':partner:email');
+        if (filled($partner->telegram_chat_id)) {
+            $this->queueDelivery('partner_donation_claimed', 'telegram', $partner->telegram_chat_id, null, [
+                'text' => $text,
+                'product_id' => $product->id,
+            ], $reference.':partner:telegram');
+        }
+
+        $managerText = sprintf(
+            "EcoLoop - konfirmasi pencatatan stok setelah pengambilan mitra\nMitra %s telah mengambil %d %s %s dari batch %s. Donasi telah tercatat; tentukan apakah stok supermarket ikut dikurangi.\n\nJika stok dikurangi, sistem mengurangi %d %s sekarang. Jika stok tetap, sistem mempertahankan angka stok (misalnya karena stok pengganti akan segera masuk).",
+            $partner->name,
+            $claim->quantity,
+            $claim->unit,
+            $product->name,
+            $claim->batch->batch_code,
+            $claim->quantity,
+            $claim->unit
+        );
+        $keyboard = ['inline_keyboard' => [[
+            ['text' => 'Kurangi stok', 'callback_data' => 'eco:partner-stock:reduce:'.$claim->id],
+            ['text' => 'Stok tetap', 'callback_data' => 'eco:partner-stock:keep:'.$claim->id],
+        ]]];
+
+        foreach (User::query()->notificationRecipients()->get(['id', 'name', 'email', 'telegram_chat_id']) as $user) {
+            $managerReference = $reference.':manager:'.$user->id;
+            $this->queueDelivery('partner_donation_stock_decision', 'email', $user->email, 'EcoLoop: konfirmasi stok donasi mitra', [
+                'body' => "Halo {$user->name},\n\n{$managerText}\n\nPilih Kurangi stok atau Stok tetap melalui tombol pada bot Telegram EcoLoopPartner_Bot.",
+                'product_id' => $product->id,
+            ], $managerReference.':email');
+            if (filled($user->telegram_chat_id)) {
+                $this->queueDelivery('partner_donation_stock_decision', 'telegram', $user->telegram_chat_id, null, [
+                    'text' => $managerText,
+                    'reply_markup' => $keyboard,
+                    'product_id' => $product->id,
+                ], $managerReference.':telegram');
+            }
+        }
+    }
+
+    /** Send the manager's stock decision back to the partner that took the goods. */
+    public function queuePartnerDonationStockResult(PartnerDonationClaim $claim): void
+    {
+        $claim->loadMissing(['batch.product', 'partner']);
+        $reduction = $claim->stock_reduction_applied ? 'dikurangi' : 'tetap sesuai pencatatan';
+        $text = sprintf(
+            "EcoLoop - pencatatan donasi diperbarui\nProduk: %s\nJumlah diambil: %d %s\nStok supermarket: %s.\nPengambilan: paling lambat 3 jam sebelum toko tutup.",
+            $claim->batch->product->name,
+            $claim->quantity,
+            $claim->unit,
+            $reduction
+        );
+        $reference = 'partner-photo-claim:'.$claim->id.':stock-result';
+        $this->queueDelivery('partner_donation_stock_result', 'email', $claim->partner->email, 'EcoLoop: keputusan stok donasi', [
+            'body' => "Halo {$claim->partner->contact_person},\n\n{$text}\n\nEcoLoop Agent",
+            'product_id' => $claim->batch->product_id,
+        ], $reference.':email');
+        if (filled($claim->partner->telegram_chat_id)) {
+            $this->queueDelivery('partner_donation_stock_result', 'telegram', $claim->partner->telegram_chat_id, null, [
+                'text' => $text,
+                'product_id' => $claim->batch->product_id,
+            ], $reference.':telegram');
+        }
     }
 
     /** Build a same-day summary for managers and cashiers in the Jakarta store timezone. */

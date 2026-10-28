@@ -42,6 +42,17 @@ interface ProductSnapshot {
     status: string;
 }
 
+interface DonationApprovalEvent {
+    batch_id: number;
+    batch_code: string;
+    product_id: number;
+    product_name: string;
+    quantity_available: number;
+    unit: string;
+    expiration_date: string;
+    manager_actions: number;
+}
+
 interface SyncRun {
     id: number;
     trigger_type: 'auto' | 'sync_now' | 'manual_cli';
@@ -51,7 +62,7 @@ interface SyncRun {
     summary: Record<string, number | string>;
     error_message: string | null;
     details: {
-        events?: { received?: SyncEvent[]; sold?: SyncEvent[]; demo_received?: SyncEvent[]; donated?: SyncEvent[] };
+        events?: { received?: SyncEvent[]; sold?: SyncEvent[]; demo_received?: SyncEvent[]; donated?: SyncEvent[]; donation_approvals?: DonationApprovalEvent[] };
         updated_products?: ProductSnapshot[];
         discount_recommendations?: DiscountRecommendation[];
         skip_reason?: string;
@@ -113,6 +124,7 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 <span class="rounded-full bg-sky-500/10 px-2.5 py-1 font-medium text-sky-800 dark:text-sky-200">+{{ run.summary.received_units || 0 }} diterima</span>
                                 <span class="rounded-full bg-orange-500/10 px-2.5 py-1 font-medium text-orange-800 dark:text-orange-200">−{{ run.summary.sold_units || 0 }} terjual</span>
                                 <span class="rounded-full bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-800 dark:text-emerald-200">{{ run.summary.donated_units || 0 }} didonasikan</span>
+                                <span class="rounded-full bg-amber-500/10 px-2.5 py-1 font-medium text-amber-800 dark:text-amber-200">{{ run.summary.donation_approvals_pending || 0 }} menunggu konfirmasi</span>
                                 <span class="rounded-full bg-violet-500/10 px-2.5 py-1 font-medium text-violet-800 dark:text-violet-200">{{ run.summary.discount_recommendations || 0 }} rekomendasi diskon</span>
                             </div>
                         </summary>
@@ -156,6 +168,15 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 </div>
                             </section>
 
+                            <section v-if="run.details.events?.donation_approvals?.length" class="space-y-2">
+                                <h3 class="flex items-center gap-2 text-sm font-semibold"><Clock3 class="size-4 text-amber-700" /> Menunggu konfirmasi donasi di Telegram</h3>
+                                <div v-for="event in run.details.events.donation_approvals" :key="`donation-approval-${event.batch_id}`" class="rounded-lg bg-amber-500/5 p-3 text-sm">
+                                    <p class="font-semibold">{{ event.product_name }} <span class="font-normal text-muted-foreground">· Batch {{ event.batch_code }}</span></p>
+                                    <p class="mt-1 text-xs text-muted-foreground">Stok batch {{ formatQuantity(event.quantity_available, event.unit) }} · Exp {{ event.expiration_date }} · {{ event.manager_actions }} tombol persetujuan dikirim ke akun manager/kasir terhubung.</p>
+                                    <p class="mt-1 text-xs font-medium text-amber-800 dark:text-amber-200">Belum didonasikan dan belum ada stok yang berubah.</p>
+                                </div>
+                            </section>
+
                             <section v-if="run.details.discount_recommendations?.length" class="space-y-2">
                                 <h3 class="flex items-center gap-2 text-sm font-semibold"><Percent class="size-4 text-violet-700" /> Rekomendasi diskon menunggu persetujuan</h3>
                                 <div v-for="recommendation in run.details.discount_recommendations" :key="`discount-${recommendation.batch_code}`" class="rounded-lg bg-violet-500/5 p-3 text-sm">
@@ -164,7 +185,7 @@ const statusLabel = (status: string) => ({ active: 'Aktif', discounted: 'Diskon 
                                 </div>
                             </section>
 
-                            <p v-if="!run.details.events?.received?.length && !run.details.events?.demo_received?.length && !run.details.events?.sold?.length && !run.details.events?.donated?.length && !run.details.discount_recommendations?.length && run.status === 'completed'" class="text-sm text-muted-foreground">Proses selesai tanpa perubahan stok atau rekomendasi diskon pada batch yang tercatat.</p>
+                            <p v-if="!run.details.events?.received?.length && !run.details.events?.demo_received?.length && !run.details.events?.sold?.length && !run.details.events?.donated?.length && !run.details.events?.donation_approvals?.length && !run.details.discount_recommendations?.length && run.status === 'completed'" class="text-sm text-muted-foreground">Proses selesai tanpa perubahan stok atau rekomendasi diskon pada batch yang tercatat.</p>
                         </div>
                     </details>
                 </article>

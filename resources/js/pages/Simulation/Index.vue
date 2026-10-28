@@ -120,6 +120,7 @@ let cameraStream: MediaStream | null = null;
 let currentPreviewUrl: string | null = null;
 const analysisForm = useForm<{ photo: File | null }>({ photo: null });
 const donationForm = useForm<{ review_token: string; partner_id: number | null }>({ review_token: '', partner_id: selectedPartnerId.value });
+const partnerClaimForm = useForm<{ review_token: string; quantity: number }>({ review_token: '', quantity: 1 });
 let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const selectedDonationPartner = computed(() => props.donationPartners.find((partner) => partner.id === selectedPartnerId.value) ?? null);
 const availableUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_available, 0));
@@ -245,6 +246,7 @@ function analyzePhoto(): void {
         onSuccess: (page) => {
             const pageProps = page.props as unknown as { visionResult?: VisionResult | null };
             visionResult.value = pageProps.visionResult ?? null;
+            partnerClaimForm.quantity = 1;
         },
     });
 }
@@ -267,6 +269,27 @@ function donateReviewedPhoto(): void {
                 currentPreviewUrl = null;
                 if (photoInput.value) photoInput.value.value = '';
                 refreshData();
+            }
+        },
+    });
+}
+
+function claimReviewedPhoto(): void {
+    if (!isPartnerPortal.value || !visionResult.value?.donation_eligible || !visionResult.value.review_token) return;
+    partnerClaimForm.review_token = visionResult.value.review_token;
+    partnerClaimForm.post(route('partner.scan.claim'), {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const pageProps = page.props as unknown as { flash?: { success?: string; error?: string } };
+            donationNotice.value = pageProps.flash?.success ?? pageProps.flash?.error ?? 'Pengambilan donasi telah dicatat.';
+            if (pageProps.flash?.success) {
+                visionResult.value = null;
+                selectedPhoto.value = null;
+                photoPreviewUrl.value = null;
+                if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+                currentPreviewUrl = null;
+                if (photoInput.value) photoInput.value.value = '';
+                router.reload({ only: ['batches', 'lastUpdatedAt'], preserveScroll: true });
             }
         },
     });
@@ -460,9 +483,7 @@ function donateReviewedPhoto(): void {
                                             !visionResult.product_name
                                                 ? 'Produk tidak cocok dengan stok yang tersedia — tidak ada stok berubah'
                                                 : visionResult.donation_eligible && isPartnerPortal
-                                                  ? visionResult.donation_completed
-                                                      ? 'Layak konsumsi — donasi langsung berhasil'
-                                                      : 'Layak konsumsi — donasi belum berhasil diproses'
+                                                  ? 'Layak konsumsi — dapat diambil sebagai donasi, meski masih layak jual'
                                                   : visionResult.donation_eligible
                                                 ? 'Not suitable for sale; potentially suitable for donation'
                                                 : visionResult.condition === 'good'
@@ -485,9 +506,28 @@ function donateReviewedPhoto(): void {
                             <p class="text-sm text-foreground">{{ visionResult.reasoning }}</p>
                             <p class="text-xs leading-relaxed text-muted-foreground">{{ visionResult.safety_note }}</p>
                             <div
-                                v-if="visionResult.donation_eligible && visionResult.review_token && !isPartnerPortal"
+                                v-if="visionResult.donation_eligible && visionResult.review_token"
                                 class="space-y-3 border-t border-sidebar-border/70 pt-3"
                             >
+                                <template v-if="isPartnerPortal">
+                                    <label class="block space-y-1.5 text-sm font-medium text-foreground">
+                                        <span>Jumlah yang akan diambil ({{ visionResult.unit }})</span>
+                                        <input
+                                            v-model.number="partnerClaimForm.quantity"
+                                            type="number"
+                                            min="1"
+                                            :max="visionResult.quantity_available ?? undefined"
+                                            step="1"
+                                            class="w-full rounded-lg border-input bg-background text-sm"
+                                            :disabled="partnerClaimForm.processing"
+                                        />
+                                    </label>
+                                    <p class="text-xs text-muted-foreground">
+                                        Stok tersedia untuk pengambilan: {{ visionResult.quantity_available }} {{ visionResult.unit }}. Setelah Anda mengambilnya,
+                                        manager/kasir akan menerima konfirmasi untuk mencatat apakah stok supermarket ikut dikurangi.
+                                    </p>
+                                    <p v-if="partnerClaimForm.errors.quantity" class="text-xs text-destructive">{{ partnerClaimForm.errors.quantity }}</p>
+                                </template>
                                 <label v-if="!isPartnerPortal" class="block space-y-1.5 text-sm font-medium text-foreground"
                                     ><span>Donation partner</span>
                                     <select
@@ -511,13 +551,19 @@ function donateReviewedPhoto(): void {
                                 <button
                                     type="button"
                                     class="w-full rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="!selectedDonationPartner?.telegram_ready || donationForm.processing"
-                                    @click="donateReviewedPhoto"
+                                    :disabled="isPartnerPortal
+                                        ? partnerClaimForm.processing || !partnerClaimForm.quantity || partnerClaimForm.quantity < 1 || partnerClaimForm.quantity > (visionResult.quantity_available ?? 0)
+                                        : !selectedDonationPartner?.telegram_ready || donationForm.processing"
+                                    @click="isPartnerPortal ? claimReviewedPhoto() : donateReviewedPhoto()"
                                 >
                                     {{
-                                        donationForm.processing
-                                            ? 'Processing donation…'
-                                            : `Donate ${visionResult.quantity_available ?? 0} ${visionResult.unit ?? ''}`
+                                        isPartnerPortal
+                                            ? partnerClaimForm.processing
+                                                ? 'Mencatat pengambilan…'
+                                                : `Ambil donasi ${partnerClaimForm.quantity || 0} ${visionResult.unit ?? ''}`
+                                            : donationForm.processing
+                                              ? 'Processing donation…'
+                                              : `Donate ${visionResult.quantity_available ?? 0} ${visionResult.unit ?? ''}`
                                     }}
                                 </button>
                                 <p v-if="!isPartnerPortal && donationPartners.length === 0" class="text-xs text-amber-700">

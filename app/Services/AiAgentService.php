@@ -246,14 +246,15 @@ PROMPT;
      *     action: 'discount'|'donate'|'none',
      *     discount_percentage: float|int,
      *     recommended_partner_id: int|null,
+     *     recommended_donation_quantity: int,
      *     reasoning: string,
      *     provider: string,
      * }
      */
     public function evaluateProduct(Product $product, ?string $forceProvider = null): array
     {
-        $today = now()->startOfDay();
-        $expDate = Carbon::parse($product->expiration_date)->startOfDay();
+        $today = now('Asia/Jakarta')->startOfDay();
+        $expDate = Carbon::parse($product->expiration_date, 'Asia/Jakarta')->startOfDay();
         $daysRemaining = (int) $today->diffInDays($expDate, false);
 
         // Force specific provider if requested during live sandbox simulation
@@ -385,6 +386,7 @@ PROMPT;
      *     action: 'discount'|'donate'|'none',
      *     discount_percentage: float|int,
      *     recommended_partner_id: int|null,
+     *     recommended_donation_quantity: int,
      *     reasoning: string,
      *     provider: string,
      * }
@@ -398,6 +400,7 @@ PROMPT;
                 'action' => 'donate',
                 'discount_percentage' => 0,
                 'recommended_partner_id' => $partnerId,
+                'recommended_donation_quantity' => max(0, (int) $product->quantity),
                 'reasoning' => 'Urgent: Expires in less than 48h. Recommended for donation.',
                 'provider' => $providerName,
             ];
@@ -408,6 +411,7 @@ PROMPT;
                 'action' => 'discount',
                 'discount_percentage' => 30,
                 'recommended_partner_id' => null,
+                'recommended_donation_quantity' => 0,
                 'reasoning' => 'Optimal window for clearance sale discount.',
                 'provider' => $providerName,
             ];
@@ -417,6 +421,7 @@ PROMPT;
             'action' => 'none',
             'discount_percentage' => 0,
             'recommended_partner_id' => null,
+            'recommended_donation_quantity' => 0,
             'reasoning' => 'Stock condition safe. Shelf life exceeds clearance window.',
             'provider' => $providerName,
         ];
@@ -464,7 +469,7 @@ PROMPT;
             return null;
         }
 
-        return $this->parseAndValidateJson($rawText, $daysRemaining, 'gemini');
+        return $this->parseAndValidateJson($rawText, $daysRemaining, 'gemini', (int) $product->quantity);
     }
 
     /**
@@ -511,7 +516,7 @@ PROMPT;
             return null;
         }
 
-        return $this->parseAndValidateJson($rawText, $daysRemaining, 'groq');
+        return $this->parseAndValidateJson($rawText, $daysRemaining, 'groq', (int) $product->quantity);
     }
 
     /**
@@ -532,7 +537,7 @@ PROMPT;
                 'messages' => [
                     [
                         'role' => 'system',
-                        'content' => 'You are the EcoLoop food-waste prevention evaluator. Return only a JSON object with action, discount_percentage, recommended_partner_id, and reasoning.',
+                        'content' => 'You are the EcoLoop food-waste prevention evaluator. Return only a JSON object with action, discount_percentage, recommended_partner_id, recommended_donation_quantity, and reasoning.',
                     ],
                     ['role' => 'user', 'content' => $prompt],
                 ],
@@ -554,7 +559,7 @@ PROMPT;
             return null;
         }
 
-        return $this->parseAndValidateJson($rawText, $daysRemaining, '9router');
+        return $this->parseAndValidateJson($rawText, $daysRemaining, '9router', (int) $product->quantity);
     }
 
     /**
@@ -590,6 +595,7 @@ Analyze this product and output your decision strictly as JSON.
 1. If Days Remaining <= 2: Perishable safety risk. Recommend "donate" to an available partner ID with 0 discount.
 2. If 3 <= Days Remaining <= 7: Clearance markdown window. Recommend "discount" with appropriate percentage (between 20 and 50) and recommended_partner_id: null.
 3. If Days Remaining > 7: Stock is safe. Recommend "none" with discount_percentage: 0 and recommended_partner_id: null.
+For a donation recommendation, set recommended_donation_quantity to an integer from 1 through Stock Quantity; recommend only the amount justified by near expiry and avoid exceeding the batch stock.
 
 [REQUIRED JSON SCHEMA]
 Respond ONLY with a JSON object matching this schema without markdown fences:
@@ -597,6 +603,7 @@ Respond ONLY with a JSON object matching this schema without markdown fences:
   "action": "discount" | "donate" | "none",
   "discount_percentage": number,
   "recommended_partner_id": number | null,
+  "recommended_donation_quantity": integer,
   "reasoning": "string explanation"
 }
 PROMPT;
@@ -605,7 +612,7 @@ PROMPT;
     /**
      * Parse and sanitize raw JSON output from LLM.
      */
-    protected function parseAndValidateJson(string $rawText, int $daysRemaining, string $provider): ?array
+    protected function parseAndValidateJson(string $rawText, int $daysRemaining, string $provider, int $maximumDonationQuantity): ?array
     {
         try {
             // Remove markdown code fences if present
@@ -632,6 +639,10 @@ PROMPT;
                 ? (int) $data['recommended_partner_id']
                 : null;
 
+            $recommendedDonationQuantity = $action === 'donate'
+                ? max(1, min(max(1, $maximumDonationQuantity), (int) ($data['recommended_donation_quantity'] ?? $maximumDonationQuantity)))
+                : 0;
+
             if ($action === 'donate' && ! $partnerId) {
                 $partnerId = DonationPartner::query()->where('is_active', true)->value('id');
             }
@@ -651,6 +662,7 @@ PROMPT;
                 'action' => $action,
                 'discount_percentage' => $discountPercentage,
                 'recommended_partner_id' => $partnerId,
+                'recommended_donation_quantity' => $recommendedDonationQuantity,
                 'reasoning' => $reasoning,
                 'provider' => $provider,
             ];

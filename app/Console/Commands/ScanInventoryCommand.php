@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\AgentLog;
-use App\Models\DonationPartner;
 use App\Models\Product;
 use App\Services\AiAgentService;
 use App\Services\InventoryService;
@@ -60,7 +59,7 @@ class ScanInventoryCommand extends Command
 
         $tableRows = [];
         $discountsApplied = 0;
-        $donationsReserved = 0;
+        $donationApprovalRequests = 0;
         $noActionCount = 0;
 
         foreach ($products as $product) {
@@ -115,43 +114,16 @@ class ScanInventoryCommand extends Command
                         'Applied',
                     ];
                 } elseif ($action === 'donate') {
-                    $partnerId = $decision['recommended_partner_id']
-                        ?? DonationPartner::query()->where('is_active', true)->value('id');
-
-                    if ($partnerId) {
-                        $inventoryService->reserveForDonation($product->id, (int) $partnerId, "[AI / {$provider}] {$reasoning}");
-                        $donationsReserved++;
-
-                        $tableRows[] = [
-                            $product->sku,
-                            $product->name,
-                            "{$daysRemaining}d",
-                            'DONATE',
-                            $provider,
-                            'Reserved',
-                        ];
-                    } else {
-                        // Fallback log if no active partner found
-                        AgentLog::create([
-                            'product_id' => $product->id,
-                            'action_type' => 'alert_sent',
-                            'reasoning' => "[AI / {$provider}] Recommended for donation, but no active partner available.",
-                            'payload' => [
-                                'product_sku' => $product->sku,
-                                'decision' => $decision,
-                            ],
-                            'status' => 'pending',
-                        ]);
-
-                        $tableRows[] = [
-                            $product->sku,
-                            $product->name,
-                            "{$daysRemaining}d",
-                            'DONATE',
-                            $provider,
-                            'No Partner Active',
-                        ];
-                    }
+                    $approvalRequests = app(ExpiringDonationApprovalService::class)->createRequestsForProduct($product);
+                    $donationApprovalRequests += $approvalRequests;
+                    $tableRows[] = [
+                        $product->sku,
+                        $product->name,
+                        "{$daysRemaining}d",
+                        'DONATE',
+                        $provider,
+                        $approvalRequests > 0 ? 'Waiting for manager Telegram approval' : 'Already pending or no Telegram recipient',
+                    ];
                 } else {
                     // No action needed
                     AgentLog::create([
@@ -199,7 +171,7 @@ class ScanInventoryCommand extends Command
         );
 
         $this->components->twoColumnDetail('Discount Clearances Executed', (string) $discountsApplied);
-        $this->components->twoColumnDetail('Donation Reservations Created', (string) $donationsReserved);
+        $this->components->twoColumnDetail('Donation Approval Requests Created', (string) $donationApprovalRequests);
         $this->components->twoColumnDetail('Safe Products Monitored', (string) $noActionCount);
         $this->components->info('EcoLoop inventory scan completed successfully.');
 

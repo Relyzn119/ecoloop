@@ -45,9 +45,14 @@ const supermarketNavItems: NavItem[] = [
 ];
 const mainNavItems: NavItem[] = userRole === 'ecoloop_admin'
     ? [{ title: 'Kelola Mitra', href: '/admin/partners', icon: Handshake }]
-    : partnerRoles.includes(userRole ?? '')
-      ? [{ title: 'Status Akun Mitra', href: '/partner/pending', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }]
-      : supermarketNavItems;
+    : userRole === 'business_owner'
+      ? [
+            { title: 'Inventaris Bisnis', href: '/business-owner/inventory', icon: Package },
+            { title: 'Status Akun Mitra', href: '/partner/pending', icon: FlaskConical },
+        ]
+      : partnerRoles.includes(userRole ?? '')
+        ? [{ title: 'Status Akun Mitra', href: '/partner/pending', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }]
+        : supermarketNavItems;
 
 const footerNavItems: NavItem[] = [
     {

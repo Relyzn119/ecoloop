@@ -237,7 +237,7 @@ class TelegramAiChatService
             ];
             $title = sprintf('donasikan %s %d %s', $product->name, $quantity, $product->unit);
             $explanation = sprintf(
-                'Usulan: %s. Konfirmasi akan mengambil stok dari batch aktif yang kedaluwarsa dalam 7 hari atau kurang, berdasarkan tanggal terdekat lebih dahulu (FEFO). Setelah dikonfirmasi, stok berkurang dan pemberitahuan email/Telegram dikirim ke semua Yayasan aktif. Harga/stok belum berubah.',
+                'Usulan: %s. Konfirmasi akan mengambil stok dari batch aktif yang kedaluwarsa dalam 7 hari atau kurang, berdasarkan tanggal terdekat lebih dahulu (FEFO). Anda dapat memilih stok dikurangi atau tetap; pemberitahuan email/Telegram dikirim ke semua Yayasan aktif setelah donasi.',
                 $title
             );
         } elseif ($actionType === 'discount') {
@@ -276,12 +276,20 @@ class TelegramAiChatService
             'expires_at' => now()->addMinutes(10),
         ]);
 
-        return $this->response("{$explanation}\n\nTekan Konfirmasi untuk melanjutkan atau Batal. Permintaan kedaluwarsa dalam 10 menit.", [
-            'inline_keyboard' => [[
+        $keyboard = $actionType === 'donate'
+            ? ['inline_keyboard' => [
+                [
+                    ['text' => 'Konfirmasi · kurangi stok', 'callback_data' => 'eco:donate_reduce:'.$action->id],
+                    ['text' => 'Konfirmasi · stok tetap', 'callback_data' => 'eco:donate_keep:'.$action->id],
+                ],
+                [['text' => 'Batal', 'callback_data' => 'eco:cancel:'.$action->id]],
+            ]]
+            : ['inline_keyboard' => [[
                 ['text' => 'Konfirmasi', 'callback_data' => 'eco:confirm:'.$action->id],
                 ['text' => 'Batal', 'callback_data' => 'eco:cancel:'.$action->id],
-            ]],
-        ]);
+            ]]];
+
+        return $this->response("{$explanation}\n\nPilih tindakan di bawah. Permintaan kedaluwarsa dalam 10 menit.", $keyboard);
     }
 
     private function normalizeUnit(string $unit): ?string
@@ -356,9 +364,9 @@ class TelegramAiChatService
     private function rolePrompt(string $role): string
     {
         return match ($role) {
-            'manager', 'cashier' => 'Bertindak sebagai konsultan operasional supermarket: jelaskan data stok dan batch yang relevan, FEFO (yang kedaluwarsa lebih dulu diprioritaskan), rekomendasikan diskon dengan alasan dan angka yang jelas, serta bantu memantau permintaan persetujuan. Aturan EcoLoop: batch 4–6 hari masuk rekomendasi pending; harga tidak berubah sampai manager/kasir menyetujui. Produk yang tersisa 0–2 hari mengikuti jalur donasi otomatis yang dikonfigurasi EcoLoop. Jangan pernah mengklaim bahwa Anda telah mengubah stok/harga atau mengirim notifikasi.',
+            'manager', 'cashier' => 'Bertindak sebagai konsultan operasional supermarket: jelaskan data stok dan batch yang relevan, FEFO (yang kedaluwarsa lebih dulu diprioritaskan), rekomendasikan diskon dengan alasan dan angka yang jelas, serta bantu memantau permintaan persetujuan. Aturan EcoLoop: batch 4–6 hari masuk rekomendasi pending; harga tidak berubah sampai manager/kasir menyetujui. Batch yang kedaluwarsa dalam 0–2 hari memerlukan persetujuan donasi manager/kasir di Telegram; jangan mengklaim donasi berjalan sebelum persetujuan dan pencatatan selesai. Jangan pernah mengklaim bahwa Anda telah mengubah stok/harga atau mengirim notifikasi.',
             'umkm_partner' => 'Bertindak sebagai penasihat UMKM kuliner: bantu mencari bahan baku diskon dari katalog yang tersedia, mengurangi biaya bahan, menyusun ide menu/produksi yang realistis, dan memaksimalkan omzet tanpa mengarang penawaran. Stok bisa berubah; sarankan konfirmasi ke supermarket sebelum berangkat. Prioritaskan FEFO dan jangan menyatakan makanan pasti aman dikonsumsi.',
-            'business_owner' => 'Bertindak sebagai penasihat pemilik bisnis pemberi donasi: bantu menyusun kebijakan donasi surplus, pemilahan stok, pencatatan batch, koordinasi penyerahan dengan Yayasan, dan pengurangan food waste. Akun ini tidak mendapat wewenang mengubah inventaris supermarket; arahkan perubahan stok kepada manager/kasir yang berwenang.',
+            'business_owner' => 'Bertindak sebagai penasihat pemilik bisnis pemberi donasi: bantu menyusun kebijakan donasi surplus, pemilahan stok, dan pengurangan food waste. Pemilik bisnis boleh mencatat penerimaan stok sebagai batch baru dengan jumlah dan tanggal kedaluwarsa tersendiri melalui Inventaris Bisnis. Jangan mengklaim harga atau status donasi telah diubah, dan arahkan diskon, donasi, serta pengurangan stok ke manager/kasir yang berwenang.',
             default => 'Bertindak sebagai penasihat pemanfaatan pangan untuk Yayasan/Badan Amal: bantu menyusun ide menu dari donasi, porsi dan kombinasi bahan secara masuk akal, penyimpanan/penanganan umum, serta urutan pemakaian dengan prinsip FEFO. Gunakan hanya informasi donasi yang tersedia dan jangan menyatakan makanan pasti aman dikonsumsi hanya dari chat.',
         };
     }

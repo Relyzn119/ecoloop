@@ -21,6 +21,11 @@ Route::middleware(['auth', 'role:donation_partner,umkm_partner,business_owner'])
     Route::get('partner/pending', [PartnerPortalController::class, 'pending'])->name('partner.pending');
 });
 
+Route::middleware(['auth', 'verified', 'role:business_owner', 'partner.active'])->prefix('business-owner')->name('business-owner.')->group(function () {
+    Route::get('inventory', [ProductController::class, 'index'])->name('inventory');
+    Route::post('inventory/{product}/batches', [ProductController::class, 'addBatch'])->name('inventory.add-batch');
+});
+
 Route::middleware(['auth', 'verified', 'role:ecoloop_admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('partners', [AdminPartnerManagementController::class, 'index'])->name('partners.index');
     Route::post('partners/{donationPartner}/approve', [AdminPartnerManagementController::class, 'approve'])->name('partners.approve');
@@ -35,6 +40,7 @@ Route::middleware(['auth', 'role:umkm_partner', 'partner.active'])->prefix('umkm
 Route::middleware(['auth', 'role:donation_partner', 'partner.active'])->prefix('partner')->name('partner.')->group(function () {
     Route::get('scan', [PartnerPortalController::class, 'scan'])->name('scan');
     Route::post('scan/analyze', [PartnerPortalController::class, 'analyze'])->name('scan.analyze');
+    Route::post('scan/claim', [PartnerPortalController::class, 'claim'])->name('scan.claim');
 });
 
 Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function () {

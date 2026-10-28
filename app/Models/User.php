@@ -76,6 +76,7 @@ class User extends Authenticatable
                 ? match ($this->role) {
                     'umkm_partner' => 'umkm.offers',
                     'donation_partner' => 'partner.scan',
+                    'business_owner' => 'business-owner.inventory',
                     default => 'partner.pending',
                 }
             : 'partner.pending';

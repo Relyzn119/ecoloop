@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DiscountApproval;
 use App\Models\User;
 use App\Services\DiscountApprovalService;
+use App\Services\PartnerDonationClaimService;
 use App\Services\TelegramAiActionService;
 use App\Services\TelegramAiChatService;
 use App\Services\TelegramBotService;
@@ -16,7 +17,7 @@ use Throwable;
 
 class TelegramWebhookController extends Controller
 {
-    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat, TelegramAiActionService $aiActions): JsonResponse
+    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat, TelegramAiActionService $aiActions, PartnerDonationClaimService $partnerClaims): JsonResponse
     {
         $secret = (string) config('services.telegram.webhook_secret');
         abort_unless($secret !== '' && hash_equals($secret, (string) $request->header('X-Telegram-Bot-Api-Secret-Token')), 403);
@@ -40,6 +41,35 @@ class TelegramWebhookController extends Controller
                 // they usually match; in groups the chat ID must not be used for authorization.
                 $user = $this->authorizedUser((string) $callback['from']['id']);
                 $chatId = (string) $callback['message']['chat']['id'];
+                if (preg_match('/^eco:partner-stock:(reduce|keep):([0-9a-f-]{36})$/i', $callback['data'], $partnerStockMatch) === 1) {
+                    $resultMessage = $partnerClaims->decideStock(
+                        $partnerStockMatch[2],
+                        $user,
+                        $chatId,
+                        strtolower($partnerStockMatch[1])
+                    );
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop mencatat pilihan stok.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'partner_donation_claim_id' => $partnerStockMatch[2]]);
+                }
+
+                if (preg_match('/^eco:donation:(reduce|keep|custom|defer|reject):([0-9a-f-]{36})$/i', $callback['data'], $donationMatch) === 1) {
+                    $resultMessage = $aiActions->decideDonationBatch($donationMatch[2], $user, $chatId, strtolower($donationMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memproses pilihan donasi.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $donationMatch[2]]);
+                }
+
+                if (preg_match('/^eco:donate_(reduce|keep):([0-9a-f-]{36})$/i', $callback['data'], $donationMatch) === 1) {
+                    $resultMessage = $aiActions->decide($donationMatch[2], $user, $chatId, strtolower($donationMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memproses donasi.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $donationMatch[2]]);
+                }
+
                 if (preg_match('/^eco:(confirm|cancel):([0-9a-f-]{36})$/i', $callback['data'], $actionMatch) === 1) {
                     $actionDecision = $actionMatch[1] === 'confirm' ? 'confirm' : 'cancel';
                     $resultMessage = $aiActions->decide($actionMatch[2], $user, $chatId, $actionDecision);
@@ -108,6 +138,20 @@ class TelegramWebhookController extends Controller
                     $telegram->sendMessage($chatId, sprintf('Approved at %d%%. New batch price: %s.', $approval->approved_percentage, number_format((float) $approval->approved_price, 2)));
 
                     return response()->json(['ok' => true, 'approval_id' => $approval->id]);
+                }
+
+                if (preg_match('/^\/(?:donasi|donate)(?:@[A-Za-z0-9_]+)?\s+([0-9a-f-]{36})\s+(\d+)\s+(kurangi|tetap)$/i', $text, $matches) === 1) {
+                    $user = $this->authorizedUser($chatId);
+                    $resultMessage = $aiActions->submitCustomDonation(
+                        $matches[1],
+                        $user,
+                        $chatId,
+                        (int) $matches[2],
+                        strtolower($matches[3])
+                    );
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $matches[1]]);
                 }
 
                 if (str_starts_with($text, '/')) {

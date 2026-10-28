@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Edit3, Handshake, History, Package, Plus, RefreshCw, Search, ShieldAlert, Tag, Trash2, X } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -104,6 +104,7 @@ interface AutoSyncSummary {
     demo_new_products?: number;
     demo_donated_products?: number;
     demo_donated_units?: number;
+    donation_approvals_pending?: number;
     demo_partner_count?: number;
 }
 
@@ -129,12 +130,17 @@ const props = defineProps<{
     donation_partners: DonationPartnerItem[];
     stats: InventoryStats;
     auto_sync: AutoSyncState;
+    is_business_owner?: boolean;
 }>();
 
-const breadcrumbs: BreadcrumbItem[] = [
-    { title: 'Dashboard', href: '/dashboard' },
-    { title: 'Inventory', href: '/inventory' },
-];
+const isBusinessOwner = computed(() => props.is_business_owner === true);
+const inventoryBasePath = computed(() => isBusinessOwner.value ? '/business-owner/inventory' : '/inventory');
+const breadcrumbs = computed<BreadcrumbItem[]>(() => isBusinessOwner.value
+    ? [{ title: 'Inventaris Bisnis', href: '/business-owner/inventory' }]
+    : [
+          { title: 'Dashboard', href: '/dashboard' },
+          { title: 'Inventory', href: '/inventory' },
+      ]);
 
 const page = usePage();
 const flashSuccess = computed(() => (page.props as any).flash?.success);
@@ -176,7 +182,7 @@ let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 const applyFilters = () => {
     router.get(
-        '/inventory',
+        inventoryBasePath.value,
         {
             search: search.value || undefined,
             category: selectedCategory.value || undefined,
@@ -205,7 +211,7 @@ const clearFilters = () => {
     selectedCategory.value = '';
     selectedStatus.value = '';
     selectedUrgency.value = '';
-    router.get('/inventory', {}, { preserveState: true, replace: true });
+    router.get(inventoryBasePath.value, {}, { preserveState: true, replace: true });
 };
 
 const hasActiveFilters = computed(() => {
@@ -328,6 +334,35 @@ const confirmDelete = () => {
         onFinish: () => {
             isDeleting.value = false;
         },
+    });
+};
+
+const isAddBatchModalOpen = ref(false);
+const addBatchTarget = ref<ProductItem | null>(null);
+const addBatchForm = useForm<{ quantity: number | null; expiration_date: string; batch_code: string }>({
+    quantity: null,
+    expiration_date: '',
+    batch_code: '',
+});
+
+const openAddBatchModal = (product: ProductItem) => {
+    addBatchTarget.value = product;
+    addBatchForm.reset();
+    addBatchForm.clearErrors();
+    isAddBatchModalOpen.value = true;
+};
+
+const closeAddBatchModal = () => {
+    isAddBatchModalOpen.value = false;
+    addBatchTarget.value = null;
+    addBatchForm.reset();
+};
+
+const submitAddBatch = () => {
+    if (!addBatchTarget.value || !addBatchForm.quantity || !addBatchForm.expiration_date) return;
+    addBatchForm.post(`${inventoryBasePath.value}/${addBatchTarget.value.id}/batches`, {
+        preserveScroll: true,
+        onSuccess: () => closeAddBatchModal(),
     });
 };
 
@@ -465,13 +500,18 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
             <!-- Header Section -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">Food Inventory Management</h1>
+                    <h1 class="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
+                        {{ isBusinessOwner ? 'Inventaris Bisnis' : 'Food Inventory Management' }}
+                    </h1>
                     <p class="text-sm text-neutral-500 dark:text-neutral-400">
-                        Track stock levels, real-time expiration urgency, and execute manual markdown or donation overrides.
+                        {{ isBusinessOwner
+                            ? 'Tambahkan stok produk secara manual. Setiap penerimaan dibuat sebagai batch terpisah dengan tanggal kedaluwarsa sendiri.'
+                            : 'Track stock levels, real-time expiration urgency, and execute manual markdown or donation overrides.' }}
                     </p>
                 </div>
                 <div class="flex items-center gap-2.5">
                     <Link
+                        v-if="!isBusinessOwner"
                         href="/inventory/create"
                         class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:bg-emerald-700"
                     >
@@ -481,7 +521,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                 </div>
             </div>
 
-            <section class="flex flex-col gap-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <section v-if="!isBusinessOwner" class="flex flex-col gap-4 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 class="font-semibold text-neutral-900 dark:text-neutral-100">Supermarket Central Sync</h2>
@@ -494,7 +534,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                         <span class="rounded-full bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">DEMO DATA</span>
                     </div>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                        Auto Sync simulates central product receipts and POS sales every 5 minutes. Sync Now updates demo data immediately and donates 3 products expiring within 2 days. Manual product entry remains available.
+                        Auto Sync simulates central product receipts and POS sales every 5 minutes. Sync Now updates demo data immediately and asks the manager to approve urgent donations in Telegram; stock changes only after confirmation. Manual product entry remains available.
                     </p>
                     <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                         Last sync: {{ auto_sync.last_synced_at ? new Date(auto_sync.last_synced_at).toLocaleString() : 'Not synced yet' }}
@@ -503,8 +543,8 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                             · {{ auto_sync.last_sync_summary.received_units }} units received
                             · {{ auto_sync.last_sync_summary.sold_units }} units sold
                             <template v-if="auto_sync.last_sync_summary.demo_donated_products !== undefined">
-                                · {{ auto_sync.last_sync_summary.demo_donated_products }} urgent products donated
-                                ({{ auto_sync.last_sync_summary.demo_donated_units }} units) across
+                                · {{ auto_sync.last_sync_summary.donation_approvals_pending ?? auto_sync.last_sync_summary.demo_donated_products }} urgent products awaiting manager approval
+                                across
                                 {{ auto_sync.last_sync_summary.demo_partner_count ?? 0 }} partners
                             </template>
                             · {{ auto_sync.last_sync_summary.changed_products ?? 0 }} products updated
@@ -810,8 +850,19 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                 <!-- Row Action Buttons -->
                                 <td class="whitespace-nowrap px-4 py-4 text-right sm:pr-6">
                                     <div class="flex items-center justify-end gap-1.5">
+                                        <button
+                                            v-if="isBusinessOwner"
+                                            type="button"
+                                            title="Add a separate stock batch"
+                                            class="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-500/20 dark:text-emerald-300"
+                                            @click="openAddBatchModal(product)"
+                                        >
+                                            <Plus class="size-3.5" />
+                                            <span>Add Batch</span>
+                                        </button>
                                         <!-- Apply Discount Modal Trigger -->
                                         <button
+                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Apply Markdown Discount"
                                             :disabled="product.status === 'donated' || product.status === 'disposed' || product.status === 'sold_out'"
@@ -824,6 +875,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Reserve Donation Modal Trigger -->
                                         <button
+                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Reserve for Donation"
                                             :disabled="
@@ -841,6 +893,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Edit Item -->
                                         <Link
+                                            v-if="!isBusinessOwner"
                                             :href="`/inventory/${product.id}/edit`"
                                             title="Edit Item"
                                             class="inline-flex items-center rounded-md border border-neutral-200 bg-white p-1 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white"
@@ -850,6 +903,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
 
                                         <!-- Delete Item -->
                                         <button
+                                            v-if="!isBusinessOwner"
                                             type="button"
                                             title="Delete Item"
                                             class="inline-flex items-center rounded-md border border-neutral-200 bg-white p-1 text-neutral-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-500 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-red-500/20"
@@ -872,7 +926,16 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                                 {{ product.donated_quantity }} {{ product.unit }} donated · {{ product.sold_quantity }} {{ product.unit }} sold
                                             </p>
                                         </div>
+                                        <button
+                                            v-if="isBusinessOwner"
+                                            type="button"
+                                            class="rounded-lg border border-emerald-600 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                                            @click="openAddBatchModal(product)"
+                                        >
+                                            Add batch
+                                        </button>
                                         <Link
+                                            v-else
                                             :href="`/inventory/${product.id}/edit`"
                                             class="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
                                         >
@@ -930,7 +993,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                         </table>
                                     </div>
                                     <p class="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
-                                        Stock with 0–2 days remaining is donated automatically; batches with 3–7 days remaining may appear here as awaiting discount approval.
+                                        Batches with 0–2 days remaining trigger a manager donation approval in Telegram; batches with 3–7 days remaining may appear here as awaiting discount approval.
                                     </p>
                                 </td>
                             </tr>
@@ -961,6 +1024,7 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                                 Clear filters
                                             </button>
                                             <Link
+                                                v-if="!isBusinessOwner"
                                                 href="/inventory/create"
                                                 class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
                                             >
@@ -1007,6 +1071,58 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                                 <span v-html="link.label" />
                             </Link>
                         </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL: Add a separate receipt batch -->
+            <div
+                v-if="isAddBatchModalOpen && addBatchTarget"
+                class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+                @click.self="closeAddBatchModal"
+            >
+                <div class="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
+                    <div class="flex items-center justify-between border-b border-neutral-200 pb-4 dark:border-neutral-800">
+                        <div>
+                            <h3 class="text-base font-bold text-neutral-900 dark:text-neutral-100">Add stock batch</h3>
+                            <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{{ addBatchTarget.name }} · {{ addBatchTarget.sku }}</p>
+                        </div>
+                        <button type="button" class="rounded-lg p-1 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800" @click="closeAddBatchModal">
+                            <X class="size-4" />
+                        </button>
+                    </div>
+
+                    <div class="mt-4 space-y-4">
+                        <p class="rounded-lg bg-sky-500/5 p-3 text-xs text-neutral-600 dark:text-neutral-300">
+                            Batch ini akan disimpan terpisah dari penerimaan yang sudah ada. Stok lama dan tanggal kedaluwarsanya tidak berubah.
+                        </p>
+                        <label class="block space-y-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                            <span>Jumlah stok ({{ addBatchTarget.unit }})</span>
+                            <input v-model.number="addBatchForm.quantity" type="number" min="1" step="1" required class="w-full rounded-lg border-neutral-300 bg-white text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+                            <span v-if="addBatchForm.errors.quantity" class="font-normal text-red-600">{{ addBatchForm.errors.quantity }}</span>
+                        </label>
+                        <label class="block space-y-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                            <span>Tanggal kedaluwarsa batch baru</span>
+                            <input v-model="addBatchForm.expiration_date" type="date" :min="new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)" required class="w-full rounded-lg border-neutral-300 bg-white text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+                            <span v-if="addBatchForm.errors.expiration_date" class="font-normal text-red-600">{{ addBatchForm.errors.expiration_date }}</span>
+                        </label>
+                        <label class="block space-y-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                            <span>Kode batch (opsional)</span>
+                            <input v-model="addBatchForm.batch_code" type="text" maxlength="100" placeholder="Kosongkan untuk dibuat otomatis" class="w-full rounded-lg border-neutral-300 bg-white text-sm dark:border-neutral-700 dark:bg-neutral-800" />
+                            <span v-if="addBatchForm.errors.batch_code" class="font-normal text-red-600">{{ addBatchForm.errors.batch_code }}</span>
+                        </label>
+                        <div class="flex items-center justify-end gap-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+                            <button type="button" class="rounded-lg px-4 py-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800" @click="closeAddBatchModal">Cancel</button>
+                            <button
+                                type="button"
+                                :disabled="addBatchForm.processing || !addBatchForm.quantity || addBatchForm.quantity < 1 || !addBatchForm.expiration_date"
+                                class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                                @click="submitAddBatch"
+                            >
+                                <span v-if="addBatchForm.processing">Saving…</span>
+                                <span v-else>Add separate batch</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
