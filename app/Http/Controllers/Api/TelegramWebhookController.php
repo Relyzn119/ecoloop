@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\DiscountApproval;
 use App\Models\User;
 use App\Services\DiscountApprovalService;
+use App\Services\TelegramAiActionService;
 use App\Services\TelegramAiChatService;
 use App\Services\TelegramBotService;
 use Illuminate\Http\JsonResponse;
@@ -15,7 +16,7 @@ use Throwable;
 
 class TelegramWebhookController extends Controller
 {
-    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat): JsonResponse
+    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat, TelegramAiActionService $aiActions): JsonResponse
     {
         $secret = (string) config('services.telegram.webhook_secret');
         abort_unless($secret !== '' && hash_equals($secret, (string) $request->header('X-Telegram-Bot-Api-Secret-Token')), 403);
@@ -39,6 +40,15 @@ class TelegramWebhookController extends Controller
                 // they usually match; in groups the chat ID must not be used for authorization.
                 $user = $this->authorizedUser((string) $callback['from']['id']);
                 $chatId = (string) $callback['message']['chat']['id'];
+                if (preg_match('/^eco:(confirm|cancel):([0-9a-f-]{36})$/i', $callback['data'], $actionMatch) === 1) {
+                    $actionDecision = $actionMatch[1] === 'confirm' ? 'confirm' : 'cancel';
+                    $resultMessage = $aiActions->decide($actionMatch[2], $user, $chatId, $actionDecision);
+                    $telegram->answerCallback((string) $callback['id'], $actionDecision === 'confirm' ? 'EcoLoop sedang memproses konfirmasi.' : 'Permintaan dibatalkan.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'action_id' => $actionMatch[2]]);
+                }
+
                 [$decision, $approvalId] = array_pad(explode(':', $callback['data'], 2), 2, '');
                 abort_unless(in_array($decision, ['approve', 'reject'], true) && ctype_digit($approvalId), 422);
 
@@ -106,7 +116,8 @@ class TelegramWebhookController extends Controller
                     return response()->json(['ok' => true]);
                 }
 
-                $telegram->sendMessage($chatId, $aiChat->reply($chatId, $text));
+                $aiResponse = $aiChat->reply($chatId, $text);
+                $telegram->sendMessage($chatId, $aiResponse['text'], $aiResponse['reply_markup']);
             }
         } catch (Throwable $exception) {
             Log::warning('Telegram update could not be processed.', [

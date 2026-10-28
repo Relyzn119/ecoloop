@@ -9,9 +9,9 @@ import { FlaskConical, Handshake, HeartHandshake, LayoutGrid, Package, Percent, 
 import AppLogo from './AppLogo.vue';
 
 const page = usePage<{ auth: { user: { role: string } | null } }>();
-const partnerRoles = ['donation_partner', 'umkm_partner'];
+const partnerRoles = ['donation_partner', 'umkm_partner', 'business_owner'];
 const userRole = page.props.auth.user?.role;
-const mainNavItems: NavItem[] = [
+const supermarketNavItems: NavItem[] = [
     {
         title: 'Dashboard',
         href: '/dashboard',
@@ -33,22 +33,16 @@ const mainNavItems: NavItem[] = [
         icon: ScrollText,
     },
     {
-        title: 'Donation Partners',
-        href: '/donation-partners',
-        icon: Handshake,
-    },
-    {
         title: 'Settings',
         href: '/settings',
         icon: Settings,
     },
-]
-    .filter((item) => !partnerRoles.includes(userRole ?? '') || item.title === 'Settings')
-    .map((item) =>
-        partnerRoles.includes(userRole ?? '') && item.title === 'Settings'
-            ? { ...item, title: userRole === 'umkm_partner' ? 'Penawaran Diskon' : 'Portal Mitra', href: userRole === 'umkm_partner' ? '/umkm/offers' : '/partner/scan', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }
-            : item,
-    );
+];
+const mainNavItems: NavItem[] = userRole === 'ecoloop_admin'
+    ? [{ title: 'Kelola Mitra', href: '/admin/partners', icon: Handshake }]
+    : partnerRoles.includes(userRole ?? '')
+      ? [{ title: 'Status Akun Mitra', href: '/partner/pending', icon: userRole === 'umkm_partner' ? Percent : FlaskConical }]
+      : supermarketNavItems;
 
 const footerNavItems: NavItem[] = [
     {
@@ -61,7 +55,7 @@ const footerNavItems: NavItem[] = [
         href: '/reports?type=discount',
         icon: Percent,
     },
-].filter(() => !partnerRoles.includes(userRole ?? ''));
+].filter(() => !partnerRoles.includes(userRole ?? '') && userRole !== 'ecoloop_admin');
 </script>
 
 <template>

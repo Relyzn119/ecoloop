@@ -83,6 +83,63 @@ class NotificationService
         }
     }
 
+    /** Broadcast one manager-requested product donation to every active foundation partner. */
+    public function queueRequestedDonationAlerts(Product $product, array $allocations, string $reference): int
+    {
+        $quantity = (int) collect($allocations)->sum('quantity');
+        $batchLines = collect($allocations)
+            ->map(fn (array $allocation): string => sprintf(
+                '• Batch %s: %d %s (kedaluwarsa %s)',
+                $allocation['batch_code'] ?: $allocation['batch_id'],
+                $allocation['quantity'],
+                $product->unit,
+                $allocation['expiration_date']
+            ))
+            ->implode("\n");
+        $details = sprintf(
+            "EcoLoop - Donasi atas permintaan manager\nProduk: %s (%s)\nJumlah total: %d %s\nRincian stok:\n%s\n\nProduk donasi sudah bisa diambil di supermarket. Pengambilan paling lambat 3 jam sebelum toko tutup. Donation Partner dipersilakan berkoordinasi dan berbagi produk sesuai kebutuhan bersama.",
+            $product->name,
+            $product->sku,
+            $quantity,
+            $product->unit,
+            $batchLines !== '' ? $batchLines : 'Rincian batch tidak tersedia.'
+        );
+        $managerDetails = $this->buildManagerDonationSummary();
+
+        $partners = DonationPartner::query()->active()->where('partner_type', 'foundation')->orderBy('id')->get();
+        foreach ($partners as $partner) {
+            $key = "telegram-ai-donation:{$reference}:partner:{$partner->id}";
+            $this->queueDelivery('donation_completed', 'email', $partner->email, 'EcoLoop: produk donasi siap diambil', [
+                'body' => "Halo {$partner->contact_person},\n\n{$details}\n\nEcoLoop Agent",
+                'product_id' => $product->id,
+            ], "{$key}:email");
+
+            if (filled($partner->telegram_chat_id)) {
+                $this->queueDelivery('donation_completed', 'telegram', $partner->telegram_chat_id, null, [
+                    'text' => $details,
+                    'product_id' => $product->id,
+                ], "{$key}:telegram");
+            }
+        }
+
+        foreach (User::query()->notificationRecipients()->get(['id', 'name', 'email', 'telegram_chat_id']) as $user) {
+            $key = "telegram-ai-donation:{$reference}:user:{$user->id}";
+            $this->queueDelivery('donation_completed', 'email', $user->email, 'EcoLoop: donasi telah diproses', [
+                'body' => "Halo {$user->name},\n\n{$managerDetails}\n\nEcoLoop Agent",
+                'product_id' => $product->id,
+            ], "{$key}:email");
+
+            if (filled($user->telegram_chat_id)) {
+                $this->queueDelivery('donation_completed', 'telegram', $user->telegram_chat_id, null, [
+                    'text' => $managerDetails,
+                    'product_id' => $product->id,
+                ], "{$key}:telegram");
+            }
+        }
+
+        return $partners->count();
+    }
+
     /** Build a same-day summary for managers and cashiers in the Jakarta store timezone. */
     private function buildManagerDonationSummary(): string
     {

@@ -1,8 +1,8 @@
 <?php
 
+use App\Http\Controllers\Admin\PartnerManagementController as AdminPartnerManagementController;
 use App\Http\Controllers\AgentLogController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\DonationPartnerController;
 use App\Http\Controllers\PartnerPortalController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ReportController;
@@ -16,8 +16,15 @@ Route::get('/', function () {
         : Inertia::render('Welcome');
 })->name('home');
 
-Route::middleware(['auth', 'role:donation_partner,umkm_partner'])->group(function () {
+Route::middleware(['auth', 'role:donation_partner,umkm_partner,business_owner'])->group(function () {
     Route::get('partner/pending', [PartnerPortalController::class, 'pending'])->name('partner.pending');
+});
+
+Route::middleware(['auth', 'verified', 'role:ecoloop_admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('partners', [AdminPartnerManagementController::class, 'index'])->name('partners.index');
+    Route::post('partners/{donationPartner}/approve', [AdminPartnerManagementController::class, 'approve'])->name('partners.approve');
+    Route::post('partners/{donationPartner}/toggle-status', [AdminPartnerManagementController::class, 'toggleStatus'])->name('partners.toggle-status');
+    Route::delete('partners/{donationPartner}', [AdminPartnerManagementController::class, 'destroy'])->name('partners.destroy');
 });
 
 Route::middleware(['auth', 'role:umkm_partner', 'partner.active'])->prefix('umkm')->name('umkm.')->group(function () {
@@ -45,12 +52,6 @@ Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function 
     Route::post('inventory/{product}/discount', [ProductController::class, 'applyDiscount'])->name('inventory.discount');
     Route::post('inventory/{product}/donate', [ProductController::class, 'reserveDonation'])->name('inventory.donate');
 
-    // Donation Partners Management CRUD & Status Toggle
-    Route::get('donation-partners', [DonationPartnerController::class, 'index'])->name('donation-partners.index');
-    Route::post('donation-partners', [DonationPartnerController::class, 'store'])->name('donation-partners.store');
-    Route::put('donation-partners/{donation_partner}', [DonationPartnerController::class, 'update'])->name('donation-partners.update');
-    Route::delete('donation-partners/{donation_partner}', [DonationPartnerController::class, 'destroy'])->name('donation-partners.destroy');
-
     // AI Agent Logs & Manual Overrides Audit Trail
     Route::get('agent-logs', [AgentLogController::class, 'index'])->name('agent-logs.index');
     Route::post('agent-logs/{agent_log}/override', [AgentLogController::class, 'override'])->name('agent-logs.override');
@@ -61,10 +62,6 @@ Route::middleware(['auth', 'verified', 'role:manager,cashier'])->group(function 
     Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
     Route::post('simulation/vision/analyze', [SimulationController::class, 'analyzeDonationPhoto'])->name('simulation.vision.analyze');
     Route::post('simulation/vision/donate', [SimulationController::class, 'donateReviewedBatch'])->name('simulation.vision.donate');
-});
-
-Route::middleware(['auth', 'verified', 'role:manager'])->group(function () {
-    Route::post('donation-partners/{donation_partner}/toggle-status', [DonationPartnerController::class, 'toggleStatus'])->name('donation-partners.toggle-status');
 });
 
 require __DIR__.'/settings.php';

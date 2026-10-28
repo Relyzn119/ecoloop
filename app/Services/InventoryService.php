@@ -135,6 +135,228 @@ class InventoryService
         return $approvals;
     }
 
+    /** Preview available product quantity in batches expiring within seven days. */
+    public function previewExpiringDonation(int $productId): array
+    {
+        $product = Product::query()->findOrFail($productId);
+        $batches = ProductBatch::query()
+            ->where('product_id', $productId)
+            ->where('quantity_available', '>', 0)
+            ->whereIn('status', ['active', 'discounted'])
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->whereDate('expiration_date', '<=', now()->addDays(7)->toDateString())
+            ->orderBy('expiration_date')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'product' => $product,
+            'available_quantity' => (int) $batches->sum('quantity_available'),
+            'batches' => $batches,
+        ];
+    }
+
+    /** Preview active, near-expiry batches that may receive a manager discount request. */
+    public function previewExpiringDiscountApproval(int $productId): array
+    {
+        $product = Product::query()->findOrFail($productId);
+        $batches = ProductBatch::query()
+            ->where('product_id', $productId)
+            ->where('quantity_available', '>', 0)
+            ->where('status', 'active')
+            ->whereDate('expiration_date', '>=', now()->toDateString())
+            ->whereDate('expiration_date', '<=', now()->addDays(7)->toDateString())
+            ->orderBy('expiration_date')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'product' => $product,
+            'available_quantity' => (int) $batches->sum('quantity_available'),
+            'batches' => $batches,
+        ];
+    }
+
+    /** Donate a requested quantity from the earliest-expiring eligible batches. */
+    public function donateExpiringProductQuantity(int $productId, int $quantity, int $managerId, string $actionId): array
+    {
+        if ($quantity < 1) {
+            throw new InvalidArgumentException('Donation quantity must be greater than zero.');
+        }
+
+        $result = DB::transaction(function () use ($productId, $quantity, $actionId): array {
+            $product = Product::query()->lockForUpdate()->findOrFail($productId);
+            $batches = ProductBatch::query()
+                ->where('product_id', $productId)
+                ->where('quantity_available', '>', 0)
+                ->whereIn('status', ['active', 'discounted'])
+                ->whereDate('expiration_date', '>=', now()->toDateString())
+                ->whereDate('expiration_date', '<=', now()->addDays(7)->toDateString())
+                ->orderBy('expiration_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $available = (int) $batches->sum('quantity_available');
+
+            if ($available < $quantity) {
+                return [
+                    'success' => false,
+                    'product_name' => $product->name,
+                    'available_quantity' => $available,
+                    'unit' => $product->unit,
+                ];
+            }
+
+            $remaining = $quantity;
+            $allocations = [];
+            foreach ($batches as $batch) {
+                if ($remaining === 0) {
+                    break;
+                }
+
+                $donated = min($remaining, $batch->quantity_available);
+                $newAvailable = $batch->quantity_available - $donated;
+                $batch->update([
+                    'quantity_available' => $newAvailable,
+                    'quantity_donated' => $batch->quantity_donated + $donated,
+                    'status' => $newAvailable === 0 ? 'donated' : $batch->status,
+                    'partner_review_ready_at' => null,
+                    'partner_review_requested_by' => null,
+                ]);
+
+                AgentLog::query()->create([
+                    'product_id' => $product->id,
+                    'action_type' => 'donation_requested',
+                    'reasoning' => 'Donation quantity requested by a manager or cashier through EcoLoop AI and confirmed in Telegram.',
+                    'payload' => [
+                        'event_type' => 'donation_completed',
+                        'source' => 'telegram_ai_manager_request',
+                        'request_id' => $actionId,
+                        'batch_id' => $batch->id,
+                        'batch_code' => $batch->batch_code,
+                        'quantity_donated' => $donated,
+                        'unit' => $product->unit,
+                        'partner_distribution' => 'all_active_foundations',
+                    ],
+                    'status' => 'success',
+                ]);
+
+                $allocations[] = [
+                    'batch_id' => $batch->id,
+                    'batch_code' => $batch->batch_code,
+                    'quantity' => $donated,
+                    'expiration_date' => $batch->expiration_date->toDateString(),
+                ];
+                $remaining -= $donated;
+            }
+
+            $this->refreshProductStockSummary($product->id);
+
+            return [
+                'success' => true,
+                'product' => $product->fresh(),
+                'quantity' => $quantity,
+                'unit' => $product->unit,
+                'allocations' => $allocations,
+            ];
+        });
+
+        if (! $result['success']) {
+            return $result;
+        }
+
+        $notificationsQueued = true;
+        $partnerCount = 0;
+        try {
+            $partnerCount = $this->notificationService->queueRequestedDonationAlerts(
+                $result['product'],
+                $result['allocations'],
+                $actionId
+            );
+        } catch (Throwable $exception) {
+            $notificationsQueued = false;
+            Log::error('Telegram-requested donation succeeded but partner notifications could not be queued.', [
+                'request_id' => $actionId,
+                'product_id' => $productId,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+
+        app(N8nFinalEventService::class)->queue(
+            'donation.completed',
+            'telegram-ai-action:'.$actionId,
+            [
+                'request_id' => $actionId,
+                'product_id' => $productId,
+                'product_name' => $result['product']->name,
+                'quantity' => $quantity,
+                'unit' => $result['unit'],
+                'allocations' => $result['allocations'],
+                'requested_by' => $managerId,
+            ]
+        );
+
+        return [
+            'success' => true,
+            'product_name' => $result['product']->name,
+            'quantity' => $quantity,
+            'unit' => $result['unit'],
+            'remaining_stock' => $result['product']->quantity,
+            'allocations' => $result['allocations'],
+            'notifications_queued' => $notificationsQueued,
+            'partner_count' => $partnerCount,
+        ];
+    }
+
+    /** Request discounts for near-expiry batches without changing their prices. */
+    public function requestExpiringDiscountApproval(int $productId, int $percentage, string $reason): array
+    {
+        if ($percentage < 1 || $percentage > 50) {
+            throw new InvalidArgumentException('Discount recommendations must be between 1% and 50%.');
+        }
+
+        return DB::transaction(function () use ($productId, $percentage, $reason): array {
+            $product = Product::query()->findOrFail($productId);
+            $batches = ProductBatch::query()
+                ->where('product_id', $productId)
+                ->where('quantity_available', '>', 0)
+                ->where('status', 'active')
+                ->whereDate('expiration_date', '>=', now()->toDateString())
+                ->whereDate('expiration_date', '<=', now()->addDays(7)->toDateString())
+                ->orderBy('expiration_date')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $created = 0;
+            $approvalIds = [];
+            foreach ($batches as $batch) {
+                $approval = DiscountApproval::query()->firstOrCreate(
+                    ['product_batch_id' => $batch->id, 'status' => 'pending'],
+                    [
+                        'product_id' => $product->id,
+                        'recommended_percentage' => $percentage,
+                        'recommended_price' => round((float) $batch->original_price * (1 - ($percentage / 100)), 2),
+                        'reasoning' => $reason,
+                    ]
+                );
+                if ($approval->wasRecentlyCreated) {
+                    $created++;
+                    $this->notificationService->queueDiscountApproval($approval);
+                }
+                $approvalIds[] = $approval->id;
+            }
+
+            return [
+                'product_name' => $product->name,
+                'unit' => $product->unit,
+                'batch_count' => $batches->count(),
+                'created_count' => $created,
+                'approval_ids' => $approvalIds,
+            ];
+        });
+    }
+
     /**
      * Reserve a product for donation to a partner and log the audit entry.
      *

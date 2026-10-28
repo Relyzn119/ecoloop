@@ -67,10 +67,18 @@ class User extends Authenticatable
     /** Resolve the post-authentication destination for this account role. */
     public function landingRoute(): string
     {
-        if (in_array($this->role, ['donation_partner', 'umkm_partner'], true)) {
+        if ($this->role === 'ecoloop_admin') {
+            return 'admin.partners.index';
+        }
+
+        if (in_array($this->role, ['donation_partner', 'umkm_partner', 'business_owner'], true)) {
             return $this->donationPartner?->is_active
-                ? ($this->role === 'umkm_partner' ? 'umkm.offers' : 'partner.scan')
-                : 'partner.pending';
+                ? match ($this->role) {
+                    'umkm_partner' => 'umkm.offers',
+                    'donation_partner' => 'partner.scan',
+                    default => 'partner.pending',
+                }
+            : 'partner.pending';
         }
 
         return 'dashboard';
