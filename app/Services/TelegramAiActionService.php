@@ -49,36 +49,10 @@ class TelegramAiActionService
             }
 
             $payload = $action->payload ?? [];
-            if ($decision === 'arm') {
-                if ($action->status !== 'pending') {
-                    return ['text' => 'Tahap konfirmasi pertama sudah dilewati atau permintaan tidak lagi aktif.', 'reply_markup' => null];
-                }
-                $availableAt = now()->addSeconds(5);
-                $payload['confirmation_available_at'] = $availableAt->toIso8601String();
-                $action->update(['status' => 'cooldown', 'payload' => $payload]);
-
-                return [
-                    'text' => 'Jeda 5 detik dimulai. Setelah jeda selesai, tekan “Aktifkan otomatis” untuk menerapkan kebijakan. Anda masih dapat membatalkan.',
-                    'reply_markup' => ['inline_keyboard' => [[
-                        ['text' => 'Aktifkan otomatis', 'callback_data' => 'eco:auto:activate:'.$action->id],
-                        ['text' => 'Batalkan', 'callback_data' => 'eco:auto:cancel:'.$action->id],
-                    ]]],
-                ];
-            }
-
-            if ($action->status !== 'cooldown') {
-                return ['text' => 'Tekan “Mulai konfirmasi 5 detik” terlebih dahulu. Tidak ada kebijakan yang berubah.', 'reply_markup' => null];
-            }
-
-            $availableAt = Carbon::parse((string) ($payload['confirmation_available_at'] ?? now()->addDay()->toIso8601String()));
-            if ($availableAt->isFuture()) {
-                return [
-                    'text' => 'Jeda 5 detik belum selesai. Tunggu sebentar lalu tekan “Aktifkan otomatis” lagi. Kebijakan belum berubah.',
-                    'reply_markup' => ['inline_keyboard' => [[
-                        ['text' => 'Aktifkan otomatis', 'callback_data' => 'eco:auto:activate:'.$action->id],
-                        ['text' => 'Batalkan', 'callback_data' => 'eco:auto:cancel:'.$action->id],
-                    ]]],
-                ];
+            // `arm` is retained for buttons sent by older bot messages. Both the
+            // old and new activation buttons now perform one explicit confirmation.
+            if (! in_array($action->status, ['pending', 'cooldown'], true)) {
+                return ['text' => 'Permintaan otomatisasi ini sudah diproses atau tidak lagi aktif. Ajukan permintaan baru bila masih diperlukan.', 'reply_markup' => null];
             }
 
             $settings = InventorySyncSetting::query()->lockForUpdate()->findOrFail(1);
@@ -108,14 +82,16 @@ class TelegramAiActionService
             $settings->save();
 
             AgentLog::query()->create([
-                'action_type' => $enabled ? 'automation_policy_enabled' : 'automation_policy_disabled',
-                'reasoning' => sprintf('Automatic inventory policy %s by %s after two Telegram confirmations and a 5-second cooldown.', $enabled ? 'enabled' : 'disabled', $user->name),
+                // Keep action_type within the existing database enum. The specific
+                // event and affected scopes are recorded in the JSON payload.
+                'action_type' => 'manual_override',
+                'reasoning' => sprintf('Automatic inventory policy %s by %s through Telegram confirmation.', $enabled ? 'enabled' : 'disabled', $user->name),
                 'payload' => [
+                    'event' => $enabled ? 'automation_policy_enabled' : 'automation_policy_disabled',
                     'scopes' => $scopes,
                     'enabled' => $enabled,
                     'actor_id' => $user->id,
                     'telegram_chat_id' => $chatId,
-                    'confirmation_delay_seconds' => 5,
                 ],
                 'status' => 'success',
             ]);
