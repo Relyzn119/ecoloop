@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,7 +27,13 @@ class ProductController extends Controller
     {
         $today = now()->startOfDay();
 
-        $query = Product::query()->with('category:id,name,slug');
+        $query = Product::query()->with([
+            'category:id,name,slug',
+            'batches' => fn ($batchQuery) => $batchQuery
+                ->with('discountApprovals')
+                ->orderBy('expiration_date')
+                ->orderBy('created_at'),
+        ]);
 
         // Search by name, SKU, or description
         if ($search = $request->input('search')) {
@@ -121,6 +128,33 @@ class ProductController extends Controller
                     'urgency' => $urgencyLevel,
                     'status' => $product->status,
                     'created_at' => $product->created_at?->toIso8601String(),
+                    'received_quantity' => (int) $product->batches->sum('quantity_received'),
+                    'donated_quantity' => (int) $product->batches->sum('quantity_donated'),
+                    'sold_quantity' => (int) $product->batches->sum('quantity_sold'),
+                    'batches' => $product->batches->map(function ($batch) use ($today): array {
+                        $batchDaysRemaining = (int) $today->diffInDays($batch->expiration_date->startOfDay(), false);
+                        $approval = $batch->discountApprovals->sortByDesc('id')->first();
+
+                        return [
+                            'id' => $batch->id,
+                            'batch_code' => $batch->batch_code,
+                            'source' => $batch->source,
+                            'received_at' => $batch->created_at?->toIso8601String(),
+                            'quantity_received' => $batch->quantity_received,
+                            'quantity_available' => $batch->quantity_available,
+                            'quantity_donated' => $batch->quantity_donated,
+                            'quantity_sold' => $batch->quantity_sold,
+                            'expiration_date' => $batch->expiration_date->toDateString(),
+                            'days_remaining' => $batchDaysRemaining,
+                            'status' => $batch->status,
+                            'discount_price' => $batch->discount_price !== null ? (float) $batch->discount_price : null,
+                            'discount_approval' => $approval ? [
+                                'status' => $approval->status,
+                                'recommended_percentage' => $approval->recommended_percentage,
+                                'approved_percentage' => $approval->approved_percentage,
+                            ] : null,
+                        ];
+                    })->values(),
                 ];
             });
 
@@ -144,6 +178,7 @@ class ProductController extends Controller
 
         return Inertia::render('Inventory/Index', [
             'products' => $products,
+            'is_business_owner' => $request->user()?->role === 'business_owner',
             'filters' => [
                 'search' => $request->input('search', ''),
                 'category' => $request->input('category', ''),
@@ -167,6 +202,49 @@ class ProductController extends Controller
                 'reserved_donation_count' => $reservedDonationCount,
             ],
         ]);
+    }
+
+    /** Add one distinct inventory receipt batch to an existing catalog product. */
+    public function addBatch(Request $request, Product $product, InventoryService $inventoryService): RedirectResponse
+    {
+        $validated = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1'],
+            'expiration_date' => ['required', 'date', 'after_or_equal:today'],
+            'batch_code' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        DB::transaction(function () use ($product, $validated, $inventoryService): void {
+            $lockedProduct = Product::query()->lockForUpdate()->findOrFail($product->id);
+            $lockedProduct->batches()->create([
+                'batch_code' => filled($validated['batch_code'] ?? null)
+                    ? $validated['batch_code']
+                    : $lockedProduct->sku.'-'.now()->format('ymdHis').'-'.strtoupper(Str::random(4)),
+                'quantity_received' => (int) $validated['quantity'],
+                'quantity_available' => (int) $validated['quantity'],
+                'expiration_date' => $validated['expiration_date'],
+                'original_price' => $lockedProduct->original_price,
+                'discount_price' => null,
+                'status' => 'active',
+                'source' => 'manual',
+            ]);
+            $inventoryService->refreshProductStockSummary($lockedProduct->id);
+        });
+
+        $product->refresh()->load('category');
+        $evaluation = $inventoryService->evaluateProductBatches($product);
+        $actions = collect($evaluation['results']);
+        $pendingDonation = $actions->contains(fn (array $result): bool => in_array($result['action'] ?? null, ['awaiting_donation_approval', 'donation_prealert_sent'], true));
+        $pendingDiscount = $actions->contains(fn (array $result): bool => ($result['action'] ?? null) === 'awaiting_discount_approval');
+
+        $message = 'Batch baru berhasil ditambahkan dan tetap dipisah dari batch dengan tanggal kedaluwarsa lain.';
+        if ($pendingDonation) {
+            $message .= ' Batch mendekati kedaluwarsa dikirim untuk persetujuan manager/kasir melalui Telegram.';
+        } elseif ($pendingDiscount) {
+            $message .= ' Rekomendasi diskon dikirim ke manager/kasir untuk persetujuan.';
+        }
+
+        return to_route('inventory.index')
+            ->with('success', $message);
     }
 
     /**
@@ -219,12 +297,15 @@ class ProductController extends Controller
         });
 
         $evaluation = $inventoryService->evaluateProductBatches($product->load('category'));
-        $donated = collect($evaluation['results'])->contains('action', 'donated');
+        $donationPending = collect($evaluation['results'])->contains(fn (array $result): bool => in_array($result['action'] ?? null, ['awaiting_donation_approval', 'donation_prealert_sent'], true));
+        $donationNotificationUnavailable = collect($evaluation['results'])->contains(fn (array $result): bool => in_array($result['action'] ?? null, ['donation_approval_unavailable', 'donation_prealert_unavailable'], true));
 
         return redirect()->route('inventory.index')
-            ->with('success', $donated
-                ? 'Product saved and qualifying stock batches were donated automatically.'
-                : 'Product saved. Eligible discount batches are awaiting manager or cashier approval.');
+            ->with('success', $donationPending
+                ? 'Product saved. Near-expiry batches are awaiting manager Telegram donation approval; stock has not changed yet.'
+                : ($donationNotificationUnavailable
+                    ? 'Product saved, but a donation Telegram approval could not be created. Link a manager Telegram account and verify an active foundation partner; stock is unchanged.'
+                    : 'Product saved. Eligible discount batches are awaiting manager or cashier approval.'));
     }
 
     /**
@@ -361,28 +442,31 @@ class ProductController extends Controller
         $result = $sync->synchronizeForDemo();
 
         if (($result['demo_donation_error'] ?? null) !== null) {
-            return redirect()->route('inventory.index')->with(
+            return redirect()->route('inventory.sync-history')->with(
                 'error',
                 sprintf(
-                    'Demo sync updated central inventory, but only %d of %d urgent products were donated across %d active partners. %s',
-                    $result['demo_donated_products'],
+                    'Demo sync updated %d products, but only %d of %d urgent products received manager Telegram approval requests. %s',
+                    $result['changed_products'],
+                    $result['demo_pending_products'] ?? 0,
                     $result['demo_expected_products'],
-                    $result['demo_partner_count'],
                     $result['demo_donation_error']
                 )
             );
         }
 
-        return redirect()->route('inventory.index')->with(
+        return redirect()->route('inventory.sync-history')->with(
             'success',
             sprintf(
-                'Sync Now completed: %d new products, %d units received, and %d units sold. %d urgent products expiring within 2 days were donated (%d units) across %d active partners; partner notifications were queued.',
+                'Sync Now completed: %d new products, %d products updated, %d units received, %d units sold, %d discount recommendations pending (including %d demo discount batches), %d donation pre-alerts for products expiring in 3 days, and %d urgent products await Telegram approval (%d approval buttons). No donation stock changed before confirmation.',
                 $result['new_products'],
+                $result['changed_products'],
                 $result['received_units'],
                 $result['sold_units'],
-                $result['demo_donated_products'],
-                $result['demo_donated_units'],
-                $result['demo_partner_count']
+                $result['discount_recommendations'],
+                $result['demo_discount_products'],
+                $result['demo_prealert_products'],
+                $result['demo_pending_products'],
+                $result['demo_approval_actions']
             )
         );
     }

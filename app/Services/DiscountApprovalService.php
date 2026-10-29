@@ -13,17 +13,18 @@ use Illuminate\Validation\ValidationException;
 
 class DiscountApprovalService
 {
-    public function decide(int $approvalId, User $user, string $decision, ?int $percentage = null): DiscountApproval
+    public function decide(int $approvalId, User $user, string $decision, ?int $percentage = null, ?string $source = null): DiscountApproval
     {
-        if (! in_array($user->role, ['manager', 'cashier'], true)) {
-            throw new AuthorizationException('Only a manager or cashier may decide discount approvals.');
+        if (! in_array($user->role, ['business_owner', 'manager', 'cashier'], true)) {
+            throw new AuthorizationException('Only a business owner, manager, or cashier may decide discount approvals.');
         }
 
         if (! in_array($decision, ['approve', 'reject'], true)) {
             throw ValidationException::withMessages(['decision' => 'Choose approve or reject.']);
         }
 
-        $approval = DB::transaction(function () use ($approvalId, $user, $decision, $percentage): DiscountApproval {
+        $source ??= 'manager_or_cashier_approval';
+        $approval = DB::transaction(function () use ($approvalId, $user, $decision, $percentage, $source): DiscountApproval {
             $approval = DiscountApproval::query()->lockForUpdate()->findOrFail($approvalId);
             if ($approval->status !== 'pending') {
                 throw ValidationException::withMessages(['approval' => 'This discount request has already been decided.']);
@@ -68,6 +69,7 @@ class DiscountApprovalService
                     'discount_price' => $newPrice,
                     'decided_by' => $user->id,
                     'channel' => 'telegram',
+                    'source' => $source,
                 ],
                 'status' => 'success',
             ]);
@@ -76,6 +78,7 @@ class DiscountApprovalService
         });
 
         if ($approval->status === 'approved') {
+            app(NotificationService::class)->queueDiscountOffers($approval);
             app(N8nFinalEventService::class)->queue(
                 'discount.approved',
                 'discount-approval:'.$approval->id,

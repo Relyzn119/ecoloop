@@ -55,7 +55,7 @@ class User extends Authenticatable
     /** @param Builder<User> $query */
     public function scopeNotificationRecipients(Builder $query): Builder
     {
-        return $query->whereIn('role', ['manager', 'cashier']);
+        return $query->whereIn('role', ['business_owner', 'manager', 'cashier']);
     }
 
     /** Get the donation partner profile owned by this account. */
@@ -67,10 +67,20 @@ class User extends Authenticatable
     /** Resolve the post-authentication destination for this account role. */
     public function landingRoute(): string
     {
-        if ($this->role !== 'donation_partner') {
-            return 'dashboard';
+        if ($this->role === 'ecoloop_admin') {
+            return 'admin.partners.index';
         }
 
-        return $this->donationPartner?->is_active ? 'partner.scan' : 'partner.pending';
+        if (in_array($this->role, ['donation_partner', 'umkm_partner'], true)) {
+            return $this->donationPartner?->is_active
+                ? match ($this->role) {
+                    'umkm_partner' => 'umkm.offers',
+                    'donation_partner' => 'partner.scan',
+                    default => 'partner.pending',
+                }
+            : 'partner.pending';
+        }
+
+        return 'dashboard';
     }
 }

@@ -6,12 +6,12 @@ use App\Http\Resources\AgentLogResource;
 use App\Models\AgentLog;
 use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
+use App\Models\InventorySyncRun;
 use App\Models\ProductBatch;
 use App\Services\AiAgentService;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -55,7 +55,6 @@ class SimulationController extends Controller
                     'source_synced_at' => $batch->source_synced_at?->toIso8601String(),
                     'expiration_date' => $batch->expiration_date->toDateString(),
                     'days_remaining' => $daysRemaining,
-                    'partner_review_ready_at' => $batch->partner_review_ready_at?->toIso8601String(),
                 ];
             });
 
@@ -84,22 +83,79 @@ class SimulationController extends Controller
             ->limit(10)
             ->get();
 
-        $donationBatches = ProductBatch::query()
-            ->with('product:id,sku,name,unit')
-            ->where('quantity_available', '>', 0)
-            ->whereIn('status', ['active', 'discounted'])
-            ->whereDate('expiration_date', '>=', now()->toDateString())
-            ->orderBy('expiration_date')
-            ->get()
-            ->map(fn (ProductBatch $batch): array => [
-                'id' => $batch->id,
-                'name' => $batch->product->name,
-                'sku' => $batch->product->sku,
-                'batch_code' => $batch->batch_code,
-                'quantity_available' => $batch->quantity_available,
-                'unit' => $batch->product->unit,
-                'expiration_date' => $batch->expiration_date->toDateString(),
-            ]);
+        $recentActivity = AgentLogResource::collection($recentLogs)->resolve($request);
+        $syncEventTypes = [
+            'received' => 'stock_received',
+            'sold' => 'stock_sold',
+            'demo_received' => 'stock_received',
+            'donated' => 'donation_requested',
+            'discount_approvals' => 'discount_recommendation',
+            'donation_approvals' => 'donation_approval',
+            'donation_prealerts' => 'donation_prealert',
+        ];
+
+        InventorySyncRun::query()
+            ->whereIn('status', ['completed', 'partial'])
+            ->latest('id')
+            ->limit(5)
+            ->get(['id', 'started_at', 'completed_at', 'details'])
+            ->each(function (InventorySyncRun $run) use (&$recentActivity, $syncEventTypes): void {
+                foreach ($syncEventTypes as $eventGroup => $actionType) {
+                    foreach (($run->details['events'][$eventGroup] ?? []) as $index => $event) {
+                        if (! is_array($event)) {
+                            continue;
+                        }
+
+                        $quantity = $event['quantity'] ?? $event['quantity_available'] ?? null;
+                        $status = $event['status'] ?? match ($eventGroup) {
+                            'received', 'sold', 'demo_received' => 'success',
+                            'donated' => ($event['success'] ?? false) ? 'success' : 'pending',
+                            'discount_approvals' => 'pending',
+                            'donation_approvals', 'donation_prealerts' => 'pending',
+                            default => 'recorded',
+                        };
+                        $reasoning = match ($eventGroup) {
+                            'received', 'demo_received' => 'Stock received from inventory synchronization.',
+                            'sold' => 'Point-of-sale stock reduction synchronized.',
+                            'donated' => ($event['automatic'] ?? false)
+                                ? 'Automatically donated under the active product policy.'
+                                : 'Donation recorded during inventory synchronization.',
+                            'discount_approvals' => sprintf(
+                                '%s%% discount recommendation · %s approval.',
+                                (int) ($event['recommended_percentage'] ?? 0),
+                                $status
+                            ),
+                            'donation_approvals' => 'Donation candidate is waiting for manager review.',
+                            'donation_prealerts' => 'Donation candidate is forecast for tomorrow.',
+                            default => 'Inventory event recorded during synchronization.',
+                        };
+
+                        $recentActivity[] = [
+                            'id' => "sync-{$run->id}-{$eventGroup}-{$index}",
+                            'action_type' => $actionType,
+                            'reasoning' => $reasoning,
+                            'status' => $status,
+                            'created_at' => ($run->completed_at ?? $run->started_at)?->toIso8601String(),
+                            'created_at_human' => ($run->completed_at ?? $run->started_at)?->diffForHumans() ?? 'Recently',
+                            'quantity' => $quantity !== null ? (int) $quantity : null,
+                            'unit' => $event['unit'] ?? null,
+                            'batch_code' => $event['batch_code'] ?? null,
+                            'product' => ! empty($event['product_id']) || ! empty($event['product_name']) ? [
+                                'id' => $event['product_id'] ?? null,
+                                'name' => $event['product_name'] ?? 'Inventory event',
+                                'sku' => $event['sku'] ?? null,
+                            ] : null,
+                            'partner' => null,
+                        ];
+                    }
+                }
+            });
+
+        $recentActivity = collect($recentActivity)
+            ->sortByDesc(fn (array $activity): int => strtotime((string) ($activity['created_at'] ?? '')) ?: 0)
+            ->take(10)
+            ->values()
+            ->all();
 
         $partners = DonationPartner::query()
             ->active()
@@ -113,70 +169,46 @@ class SimulationController extends Controller
 
         return Inertia::render('Simulation/Index', [
             'batches' => $batches,
-            'donationBatches' => $donationBatches,
             'donationPartners' => $partners,
             'pendingApprovals' => $pendingApprovals,
-            'recentLogs' => AgentLogResource::collection($recentLogs),
+            'recentLogs' => $recentActivity,
             'lastUpdatedAt' => now()->toIso8601String(),
             'visionResult' => $request->session()->get('visionResult'),
         ]);
     }
 
-    /** Manager controls which individual inventory batches donation partners can review. */
-    public function togglePartnerReview(Request $request, ProductBatch $batch): RedirectResponse
-    {
-        $ready = DB::transaction(function () use ($request, $batch): ?bool {
-            $locked = ProductBatch::query()->lockForUpdate()->findOrFail($batch->id);
-            $ready = $locked->partner_review_ready_at === null;
-            if ($ready && ($locked->quantity_available < 1
-                || ! in_array($locked->status, ['active', 'discounted'], true)
-                || $locked->expiration_date->lt(now()->startOfDay()))) {
-                return null;
-            }
-            $locked->update([
-                'partner_review_ready_at' => $ready ? now() : null,
-                'partner_review_requested_by' => $ready ? $request->user()->id : null,
-            ]);
-
-            return $ready;
-        });
-
-        if ($ready === null) {
-            return back()->with('error', 'Batch harus memiliki stok dan belum kedaluwarsa sebelum dibuka untuk mitra.');
-        }
-
-        return back()->with('success', $ready ? 'Batch sekarang tersedia untuk scan mitra.' : 'Akses scan mitra untuk batch ini ditutup.');
-    }
-
     /** Analyze a single photo without changing inventory. */
     public function analyzeDonationPhoto(Request $request, AiAgentService $aiAgentService): RedirectResponse
     {
-        $validated = $request->validate([
-            'batch_id' => ['required', 'integer', 'exists:product_batches,id'],
+        $request->validate([
             'photo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
-        $batch = ProductBatch::query()
+        $batches = ProductBatch::query()
             ->with('product.category')
             ->where('quantity_available', '>', 0)
             ->whereIn('status', ['active', 'discounted'])
             ->whereDate('expiration_date', '>=', now()->toDateString())
-            ->find($validated['batch_id']);
+            ->orderBy('expiration_date')
+            ->limit(100)
+            ->get();
 
-        if (! $batch) {
-            return back()->withErrors(['batch_id' => 'Batch tersebut sudah tidak memiliki stok tersedia. Muat ulang halaman.']);
+        if ($batches->isEmpty()) {
+            return back()->withErrors(['photo' => 'Tidak ada stok aktif yang dapat dicocokkan.']);
         }
 
         $photo = $request->file('photo');
-        $decision = $aiAgentService->evaluateDonationPhoto(
-            $batch->product,
-            $batch,
+        $decision = $aiAgentService->identifyAndEvaluateDonationPhoto(
+            $batches,
             base64_encode($photo->get()),
             (string) $photo->getMimeType()
         );
+        $batch = $decision['matched_product_id'] === null
+            ? null
+            : $batches->firstWhere('product_id', $decision['matched_product_id']);
 
         $reviewToken = null;
-        if ($decision['donation_eligible']) {
+        if ($batch && $decision['donation_eligible']) {
             $reviewToken = (string) Str::uuid();
             $request->session()->put('simulation_vision_reviews.'.$reviewToken, [
                 'batch_id' => $batch->id,
@@ -187,11 +219,11 @@ class SimulationController extends Controller
 
         return back()->with('visionResult', [
             ...$decision,
-            'batch_id' => $batch->id,
-            'product_name' => $batch->product->name,
-            'batch_code' => $batch->batch_code,
-            'quantity_available' => $batch->quantity_available,
-            'unit' => $batch->product->unit,
+            'batch_id' => $batch?->id,
+            'product_name' => $batch?->product->name,
+            'batch_code' => $batch?->batch_code,
+            'quantity_available' => $batch?->quantity_available,
+            'unit' => $batch?->product->unit,
             'review_token' => $reviewToken,
         ]);
     }

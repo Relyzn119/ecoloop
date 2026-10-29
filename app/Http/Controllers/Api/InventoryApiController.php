@@ -153,7 +153,7 @@ class InventoryApiController extends Controller
      */
     public function simulateAiRun(Request $request): JsonResponse
     {
-        $days = (int) $request->input('days', 3);
+        $days = (int) $request->input('days', 7);
         $result = $this->inventoryService->simulateAiEvaluation($days);
 
         return response()->json([

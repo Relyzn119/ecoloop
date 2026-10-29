@@ -26,7 +26,8 @@ class SyncCentralInventory extends Command
      */
     public function handle(CentralInventorySyncService $sync): int
     {
-        $result = $sync->synchronize((bool) $this->option('force'));
+        $force = (bool) $this->option('force');
+        $result = $sync->synchronize($force, $force ? 'manual_cli' : 'auto');
 
         if ($result['skipped']) {
             $this->components->info($result['reason']);
@@ -43,6 +44,7 @@ class SyncCentralInventory extends Command
                 ['POS sales transactions', $result['sales_transactions']],
                 ['Units sold (stock reduced)', $result['sold_units']],
                 ['Products updated', $result['changed_products']],
+                ['Discount recommendations pending', $result['discount_recommendations']],
                 ['Synced at', $result['synced_at']],
             ]
         );

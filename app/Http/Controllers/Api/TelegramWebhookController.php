@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\DiscountApproval;
 use App\Models\User;
 use App\Services\DiscountApprovalService;
+use App\Services\PartnerDonationClaimService;
+use App\Services\TelegramAiActionService;
+use App\Services\TelegramAiChatService;
 use App\Services\TelegramBotService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +17,7 @@ use Throwable;
 
 class TelegramWebhookController extends Controller
 {
-    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram): JsonResponse
+    public function __invoke(Request $request, DiscountApprovalService $approvals, TelegramBotService $telegram, TelegramAiChatService $aiChat, TelegramAiActionService $aiActions, PartnerDonationClaimService $partnerClaims): JsonResponse
     {
         $secret = (string) config('services.telegram.webhook_secret');
         abort_unless($secret !== '' && hash_equals($secret, (string) $request->header('X-Telegram-Bot-Api-Secret-Token')), 403);
@@ -27,7 +30,7 @@ class TelegramWebhookController extends Controller
             'callback_query.message.chat.id' => ['required_with:callback_query', 'numeric'],
             'message' => ['sometimes', 'array'],
             'message.chat.id' => ['required_with:message', 'numeric'],
-            'message.text' => ['required_with:message', 'string', 'max:200'],
+            'message.text' => ['required_with:message', 'string', 'max:2000'],
         ]);
 
         $chatId = null;
@@ -38,6 +41,52 @@ class TelegramWebhookController extends Controller
                 // they usually match; in groups the chat ID must not be used for authorization.
                 $user = $this->authorizedUser((string) $callback['from']['id']);
                 $chatId = (string) $callback['message']['chat']['id'];
+                if (preg_match('/^eco:auto:(arm|activate|cancel):([0-9a-f-]{36})$/i', $callback['data'], $autoMatch) === 1) {
+                    $result = $aiActions->decideAutomationPolicy($autoMatch[2], $user, $chatId, strtolower($autoMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memeriksa persetujuan otomatisasi.');
+                    $telegram->sendMessage($chatId, $result['text'], $result['reply_markup']);
+
+                    return response()->json(['ok' => true, 'automation_action_id' => $autoMatch[2]]);
+                }
+
+                if (preg_match('/^eco:partner-stock:(reduce|keep):([0-9a-f-]{36})$/i', $callback['data'], $partnerStockMatch) === 1) {
+                    $resultMessage = $partnerClaims->decideStock(
+                        $partnerStockMatch[2],
+                        $user,
+                        $chatId,
+                        strtolower($partnerStockMatch[1])
+                    );
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop mencatat pilihan stok.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'partner_donation_claim_id' => $partnerStockMatch[2]]);
+                }
+
+                if (preg_match('/^eco:donation:(reduce|keep|custom|defer|reject):([0-9a-f-]{36})$/i', $callback['data'], $donationMatch) === 1) {
+                    $resultMessage = $aiActions->decideDonationBatch($donationMatch[2], $user, $chatId, strtolower($donationMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memproses pilihan donasi.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $donationMatch[2]]);
+                }
+
+                if (preg_match('/^eco:donate_(reduce|keep):([0-9a-f-]{36})$/i', $callback['data'], $donationMatch) === 1) {
+                    $resultMessage = $aiActions->decide($donationMatch[2], $user, $chatId, strtolower($donationMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memproses donasi.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $donationMatch[2]]);
+                }
+
+                if (preg_match('/^eco:(confirm|cancel):([0-9a-f-]{36})$/i', $callback['data'], $actionMatch) === 1) {
+                    $actionDecision = $actionMatch[1] === 'confirm' ? 'confirm' : 'cancel';
+                    $resultMessage = $aiActions->decide($actionMatch[2], $user, $chatId, $actionDecision);
+                    $telegram->answerCallback((string) $callback['id'], $actionDecision === 'confirm' ? 'EcoLoop sedang memproses konfirmasi.' : 'Permintaan dibatalkan.');
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'action_id' => $actionMatch[2]]);
+                }
+
                 [$decision, $approvalId] = array_pad(explode(':', $callback['data'], 2), 2, '');
                 abort_unless(in_array($decision, ['approve', 'reject'], true) && ctype_digit($approvalId), 422);
 
@@ -73,8 +122,20 @@ class TelegramWebhookController extends Controller
                 if (preg_match('/^\/(?:start|id)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
                     $telegram->sendMessage(
                         $chatId,
-                        "EcoLoop bot connected. Your Telegram chat ID is {$chatId}. Copy this ID into the Telegram Chat ID field for this partner under Donation Partners in EcoLoop. Each partner needs the chat ID from its own Telegram account or group."
+                        "Halo! Saya EcoLoop AI, asisten generatif EcoLoop. Chat ID Anda: {$chatId}. Hubungkan ID ini ke akun EcoLoop: pemilik bisnis/manager/kasir melalui Settings → Profile, atau mitra melalui pendaftaran/data mitra. Setelah terhubung, kirim pertanyaan langsung di sini. Gunakan /help untuk panduan role dan /reset untuk memulai ulang percakapan."
                     );
+
+                    return response()->json(['ok' => true]);
+                }
+
+                if (preg_match('/^\/help(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
+                    $telegram->sendMessage($chatId, $aiChat->help($chatId));
+
+                    return response()->json(['ok' => true]);
+                }
+
+                if (preg_match('/^\/reset(?:@[A-Za-z0-9_]+)?(?:\s|$)/i', $text) === 1) {
+                    $telegram->sendMessage($chatId, $aiChat->reset($chatId));
 
                     return response()->json(['ok' => true]);
                 }
@@ -86,6 +147,29 @@ class TelegramWebhookController extends Controller
 
                     return response()->json(['ok' => true, 'approval_id' => $approval->id]);
                 }
+
+                if (preg_match('/^\/(?:donasi|donate)(?:@[A-Za-z0-9_]+)?\s+([0-9a-f-]{36})\s+(\d+)\s+(kurangi|tetap)$/i', $text, $matches) === 1) {
+                    $user = $this->authorizedUser($chatId);
+                    $resultMessage = $aiActions->submitCustomDonation(
+                        $matches[1],
+                        $user,
+                        $chatId,
+                        (int) $matches[2],
+                        strtolower($matches[3])
+                    );
+                    $telegram->sendMessage($chatId, $resultMessage);
+
+                    return response()->json(['ok' => true, 'donation_action_id' => $matches[1]]);
+                }
+
+                if (str_starts_with($text, '/')) {
+                    $telegram->sendMessage($chatId, $aiChat->help($chatId));
+
+                    return response()->json(['ok' => true]);
+                }
+
+                $aiResponse = $aiChat->reply($chatId, $text);
+                $telegram->sendMessage($chatId, $aiResponse['text'], $aiResponse['reply_markup']);
             }
         } catch (Throwable $exception) {
             Log::warning('Telegram update could not be processed.', [
@@ -97,7 +181,7 @@ class TelegramWebhookController extends Controller
                 $telegram->answerCallback((string) $update['callback_query']['id'], 'Could not process. Check role and pending status.');
             } elseif ($chatId !== null && isset($update['message'])) {
                 try {
-                    $telegram->sendMessage($chatId, 'EcoLoop could not process that action. Check that your Telegram chat ID is linked to a manager or cashier account and that the request is still pending.');
+                    $telegram->sendMessage($chatId, 'EcoLoop tidak dapat memproses pesan ini. Pastikan Chat ID terhubung ke akun EcoLoop dan coba lagi. Untuk persetujuan diskon, pemilik bisnis/manager/kasir dapat memutuskan permintaan yang masih pending.');
                 } catch (Throwable) {
                     // Telegram delivery will be retried through the notification queue for outgoing alerts.
                 }

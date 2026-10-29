@@ -15,6 +15,10 @@ class EnsureActiveDonationPartner
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if ($request->user()?->role !== 'business_owner') {
+            return $next($request);
+        }
+
         $partner = $request->user()?->donationPartner;
 
         if (! $partner?->is_active) {

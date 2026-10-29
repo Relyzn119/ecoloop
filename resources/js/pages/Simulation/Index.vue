@@ -16,7 +16,7 @@ import {
     RefreshCw,
     Tag,
 } from 'lucide-vue-next';
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 interface InventoryBatch {
     id: number;
@@ -38,7 +38,6 @@ interface InventoryBatch {
     source_synced_at: string | null;
     expiration_date: string;
     days_remaining: number;
-    partner_review_ready_at?: string | null;
 }
 
 interface DiscountApprovalItem {
@@ -55,23 +54,16 @@ interface DiscountApprovalItem {
 }
 
 interface AgentLogItem {
-    id: number;
+    id: number | string;
     action_type: string;
     reasoning: string;
     status: string;
     created_at_human: string;
+    quantity?: number | null;
+    unit?: string | null;
+    batch_code?: string | null;
     product?: { id: number; name: string; sku: string } | null;
     partner?: { id: number | null; name: string } | null;
-}
-
-interface DonationBatchOption {
-    id: number;
-    name: string;
-    sku: string;
-    batch_code: string | null;
-    quantity_available: number;
-    unit: string;
-    expiration_date: string;
 }
 
 interface DonationPartnerOption {
@@ -87,12 +79,14 @@ interface VisionResult {
     reasoning: string;
     safety_note: string;
     provider: string;
-    batch_id: number;
-    product_name: string;
+    batch_id: number | null;
+    product_name: string | null;
     batch_code: string | null;
-    quantity_available: number;
-    unit: string;
+    quantity_available: number | null;
+    unit: string | null;
     review_token: string | null;
+    donation_completed?: boolean;
+    donation_message?: string | null;
 }
 
 const props = defineProps<{
@@ -100,7 +94,6 @@ const props = defineProps<{
     pendingApprovals: DiscountApprovalItem[];
     recentLogs: AgentLogItem[];
     lastUpdatedAt: string;
-    donationBatches: DonationBatchOption[];
     donationPartners: DonationPartnerOption[];
     visionResult: VisionResult | null;
     portalMode?: 'staff' | 'partner';
@@ -117,7 +110,6 @@ const breadcrumbs = computed<BreadcrumbItem[]>(() =>
 );
 
 const isRefreshing = ref(false);
-const selectedBatchId = ref<number | null>(null);
 const selectedPartnerId = ref<number | null>(props.donationPartners[0]?.id ?? null);
 const selectedPhoto = ref<File | null>(null);
 const photoPreviewUrl = ref<string | null>(null);
@@ -129,8 +121,10 @@ const cameraActive = ref(false);
 const cameraError = ref('');
 let cameraStream: MediaStream | null = null;
 let currentPreviewUrl: string | null = null;
-const analysisForm = useForm<{ batch_id: number | null; photo: File | null }>({ batch_id: null, photo: null });
+const analysisForm = useForm<{ photo: File | null }>({ photo: null });
 const donationForm = useForm<{ review_token: string; partner_id: number | null }>({ review_token: '', partner_id: selectedPartnerId.value });
+const partnerClaimForm = useForm<{ review_token: string; quantity: number }>({ review_token: '', quantity: 1 });
+let approvalRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const selectedDonationPartner = computed(() => props.donationPartners.find((partner) => partner.id === selectedPartnerId.value) ?? null);
 const availableUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_available, 0));
 const donatedUnits = computed(() => props.batches.reduce((total, batch) => total + batch.quantity_donated, 0));
@@ -140,12 +134,21 @@ const lastUpdatedLabel = computed(() =>
 
 onBeforeUnmount(() => {
     if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+    if (approvalRefreshTimer) clearInterval(approvalRefreshTimer);
     stopCamera();
+});
+
+onMounted(() => {
+    if (!isPartnerPortal.value) {
+        approvalRefreshTimer = setInterval(() => {
+            router.reload({ only: ['pendingApprovals'], preserveScroll: true });
+        }, 5000);
+    }
 });
 
 function refreshData(): void {
     router.reload({
-        only: ['batches', 'donationBatches', 'donationPartners', 'pendingApprovals', 'recentLogs', 'lastUpdatedAt'],
+        only: ['batches', 'donationPartners', 'pendingApprovals', 'recentLogs', 'lastUpdatedAt'],
         onStart: () => {
             isRefreshing.value = true;
         },
@@ -157,6 +160,23 @@ function refreshData(): void {
 
 function formatCurrency(value: number): string {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+}
+
+function activityLabel(actionType: string): string {
+    const labels: Record<string, string> = {
+        stock_received: 'Stock received',
+        stock_sold: 'Stock sold',
+        donation_requested: 'Donation',
+        donation_approval: 'Donation review',
+        donation_prealert: 'Donation forecast',
+        discount_recommendation: 'Discount recommendation',
+        discount_applied: 'Discount applied',
+        discount_rejected: 'Discount rejected',
+        alert_sent: 'Notification sent',
+        manual_override: 'Manual change',
+    };
+
+    return labels[actionType] ?? actionType.replaceAll('_', ' ');
 }
 
 function expiryLabel(days: number): string {
@@ -236,10 +256,9 @@ function captureCameraPhoto(): void {
 }
 
 function analyzePhoto(): void {
-    if (!selectedBatchId.value || !selectedPhoto.value) return;
+    if (!selectedPhoto.value) return;
     visionResult.value = null;
     donationNotice.value = '';
-    analysisForm.batch_id = selectedBatchId.value;
     analysisForm.photo = selectedPhoto.value;
     analysisForm.post(route(isPartnerPortal.value ? 'partner.scan.analyze' : 'simulation.vision.analyze'), {
         forceFormData: true,
@@ -247,6 +266,7 @@ function analyzePhoto(): void {
         onSuccess: (page) => {
             const pageProps = page.props as unknown as { visionResult?: VisionResult | null };
             visionResult.value = pageProps.visionResult ?? null;
+            partnerClaimForm.quantity = 1;
         },
     });
 }
@@ -256,7 +276,7 @@ function donateReviewedPhoto(): void {
     donationNotice.value = '';
     donationForm.review_token = visionResult.value.review_token;
     donationForm.partner_id = isPartnerPortal.value ? null : selectedPartnerId.value;
-    donationForm.post(route(isPartnerPortal.value ? 'partner.scan.donate' : 'simulation.vision.donate'), {
+    donationForm.post(route('simulation.vision.donate'), {
         preserveScroll: true,
         onSuccess: (page) => {
             const pageProps = page.props as unknown as { flash?: { success?: string; error?: string } };
@@ -269,6 +289,27 @@ function donateReviewedPhoto(): void {
                 currentPreviewUrl = null;
                 if (photoInput.value) photoInput.value.value = '';
                 refreshData();
+            }
+        },
+    });
+}
+
+function claimReviewedPhoto(): void {
+    if (!isPartnerPortal.value || !visionResult.value?.donation_eligible || !visionResult.value.review_token) return;
+    partnerClaimForm.review_token = visionResult.value.review_token;
+    partnerClaimForm.post(route('partner.scan.claim'), {
+        preserveScroll: true,
+        onSuccess: (page) => {
+            const pageProps = page.props as unknown as { flash?: { success?: string; error?: string } };
+            donationNotice.value = pageProps.flash?.success ?? pageProps.flash?.error ?? 'Pengambilan donasi telah dicatat.';
+            if (pageProps.flash?.success) {
+                visionResult.value = null;
+                selectedPhoto.value = null;
+                photoPreviewUrl.value = null;
+                if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+                currentPreviewUrl = null;
+                if (photoInput.value) photoInput.value.value = '';
+                router.reload({ only: ['batches', 'lastUpdatedAt'], preserveScroll: true });
             }
         },
     });
@@ -360,23 +401,9 @@ function donateReviewedPhoto(): void {
                 </div>
                 <div class="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)]">
                     <div class="space-y-4">
-                        <label class="block space-y-1.5 text-sm font-medium text-foreground">
-                            <span>Inventory lot</span>
-                            <select
-                                v-model.number="selectedBatchId"
-                                class="w-full rounded-lg border-input bg-background text-sm"
-                                :disabled="analysisForm.processing || donationBatches.length === 0"
-                            >
-                                <option :value="null" disabled>Select product and batch</option>
-                                <option v-for="batch in donationBatches" :key="batch.id" :value="batch.id">
-                                    {{ batch.name }} · {{ batch.batch_code || 'Batch' }} · {{ batch.quantity_available }} {{ batch.unit }}
-                                </option>
-                            </select>
-                            <span v-if="analysisForm.errors.batch_id" class="block text-xs text-red-600">{{ analysisForm.errors.batch_id }}</span>
-                            <span v-if="donationBatches.length === 0" class="block text-xs text-muted-foreground"
-                                >There are no available batches to review.</span
-                            >
-                        </label>
+                        <p class="text-sm text-muted-foreground">
+                            Ambil atau unggah foto produk. AI akan mencocokkannya dengan stok yang tersedia dan memilih batch yang paling dekat tanggal kedaluwarsanya.
+                        </p>
                         <div class="flex flex-wrap gap-2">
                             <input
                                 ref="photoInput"
@@ -405,7 +432,7 @@ function donateReviewedPhoto(): void {
                             <button
                                 type="button"
                                 class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                :disabled="!selectedBatchId || !selectedPhoto || analysisForm.processing || donationBatches.length === 0"
+                                :disabled="!selectedPhoto || analysisForm.processing"
                                 @click="analyzePhoto"
                             >
                                 <RefreshCw class="size-4" :class="{ 'animate-spin': analysisForm.processing }" />{{
@@ -473,17 +500,25 @@ function donateReviewedPhoto(): void {
                                 <div>
                                     <p class="font-semibold text-foreground">
                                         {{
-                                            visionResult.donation_eligible
+                                            !visionResult.product_name
+                                                ? 'Produk tidak cocok dengan stok yang tersedia — tidak ada stok berubah'
+                                                : visionResult.donation_eligible && isPartnerPortal
+                                                  ? 'Layak konsumsi — dapat diambil sebagai donasi, meski masih layak jual'
+                                                  : visionResult.donation_eligible
                                                 ? 'Not suitable for sale; potentially suitable for donation'
                                                 : visionResult.condition === 'good'
-                                                  ? 'Still suitable for sale — donation is disabled'
+                                                  ? isPartnerPortal
+                                                      ? 'Masih layak konsumsi — donasi dapat dilanjutkan'
+                                                      : 'Still suitable for sale — donation is disabled'
                                                   : visionResult.condition === 'poor'
                                                     ? 'Possible spoilage or unsafe condition — do not donate'
                                                     : 'Unclear — inspect manually or take another photo'
                                         }}
                                     </p>
                                     <p class="text-xs text-muted-foreground">
-                                        {{ visionResult.product_name }} · {{ visionResult.batch_code || 'Batch' }} ·
+                                        <template v-if="visionResult.product_name">
+                                            {{ visionResult.product_name }} · {{ visionResult.batch_code || 'Batch' }} ·
+                                        </template>
                                         {{ Math.round(visionResult.confidence * 100) }}% visual confidence
                                     </p>
                                 </div>
@@ -494,6 +529,25 @@ function donateReviewedPhoto(): void {
                                 v-if="visionResult.donation_eligible && visionResult.review_token"
                                 class="space-y-3 border-t border-sidebar-border/70 pt-3"
                             >
+                                <template v-if="isPartnerPortal">
+                                    <label class="block space-y-1.5 text-sm font-medium text-foreground">
+                                        <span>Jumlah yang akan diambil ({{ visionResult.unit }})</span>
+                                        <input
+                                            v-model.number="partnerClaimForm.quantity"
+                                            type="number"
+                                            min="1"
+                                            :max="visionResult.quantity_available ?? undefined"
+                                            step="1"
+                                            class="w-full rounded-lg border-input bg-background text-sm"
+                                            :disabled="partnerClaimForm.processing"
+                                        />
+                                    </label>
+                                    <p class="text-xs text-muted-foreground">
+                                        Stok tersedia untuk pengambilan: {{ visionResult.quantity_available }} {{ visionResult.unit }}. Setelah Anda mengambilnya,
+                                        manager/kasir akan menerima konfirmasi untuk mencatat apakah stok supermarket ikut dikurangi.
+                                    </p>
+                                    <p v-if="partnerClaimForm.errors.quantity" class="text-xs text-destructive">{{ partnerClaimForm.errors.quantity }}</p>
+                                </template>
                                 <label v-if="!isPartnerPortal" class="block space-y-1.5 text-sm font-medium text-foreground"
                                     ><span>Donation partner</span>
                                     <select
@@ -514,22 +568,22 @@ function donateReviewedPhoto(): void {
                                     Set the partner Telegram chat ID in Donation Partners to enable donation and ensure both email and Telegram alerts
                                     can be queued.
                                 </p>
-                                <p v-if="isPartnerPortal" class="text-sm text-muted-foreground">
-                                    Donasi akan tercatat untuk organisasi Anda. Supermarket dan manager akan menerima notifikasi.
-                                </p>
-                                <p v-if="isPartnerPortal && !selectedDonationPartner?.telegram_ready" class="text-xs text-amber-700">
-                                    Akun mitra belum memiliki Telegram Chat ID. Minta manager melengkapi profil sebelum donasi.
-                                </p>
                                 <button
                                     type="button"
                                     class="w-full rounded-lg bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="!selectedDonationPartner?.telegram_ready || donationForm.processing"
-                                    @click="donateReviewedPhoto"
+                                    :disabled="isPartnerPortal
+                                        ? partnerClaimForm.processing || !partnerClaimForm.quantity || partnerClaimForm.quantity < 1 || partnerClaimForm.quantity > (visionResult.quantity_available ?? 0)
+                                        : !selectedDonationPartner?.telegram_ready || donationForm.processing"
+                                    @click="isPartnerPortal ? claimReviewedPhoto() : donateReviewedPhoto()"
                                 >
                                     {{
-                                        donationForm.processing
-                                            ? 'Processing donation…'
-                                            : `Donate ${visionResult.quantity_available} ${visionResult.unit}`
+                                        isPartnerPortal
+                                            ? partnerClaimForm.processing
+                                                ? 'Mencatat pengambilan…'
+                                                : `Ambil donasi ${partnerClaimForm.quantity || 0} ${visionResult.unit ?? ''}`
+                                            : donationForm.processing
+                                              ? 'Processing donation…'
+                                              : `Donate ${visionResult.quantity_available ?? 0} ${visionResult.unit ?? ''}`
                                     }}
                                 </button>
                                 <p v-if="!isPartnerPortal && donationPartners.length === 0" class="text-xs text-amber-700">
@@ -537,6 +591,9 @@ function donateReviewedPhoto(): void {
                                 </p>
                             </div>
                         </article>
+                        <p v-if="isPartnerPortal && visionResult?.donation_message" role="status" class="rounded-lg bg-muted/50 p-3 text-sm text-foreground">
+                            {{ visionResult.donation_message }}
+                        </p>
                         <p v-if="donationNotice" role="status" class="rounded-lg bg-muted/50 p-3 text-sm text-foreground">{{ donationNotice }}</p>
                     </div>
                 </div>
@@ -566,7 +623,6 @@ function donateReviewedPhoto(): void {
                                 <th class="px-4 py-3">Donated / sold</th>
                                 <th class="px-4 py-3">Expiration</th>
                                 <th class="px-4 py-3">Status</th>
-                                <th v-if="$page.props.auth.user?.role === 'manager'" class="px-4 py-3">Partner scan</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-sidebar-border/60">
@@ -593,15 +649,6 @@ function donateReviewedPhoto(): void {
                                         batch.status.replace('_', ' ')
                                     }}</span>
                                 </td>
-                                <td v-if="$page.props.auth.user?.role === 'manager'" class="px-4 py-3">
-                                    <button
-                                        type="button"
-                                        class="rounded-md border px-2.5 py-1.5 text-xs font-medium hover:bg-accent"
-                                        @click="router.post(route('simulation.batches.partner-review', batch.id), {}, { preserveScroll: true })"
-                                    >
-                                        {{ batch.partner_review_ready_at ? 'Tutup akses scan' : 'Siapkan untuk mitra' }}
-                                    </button>
-                                </td>
                             </tr>
                             <tr v-if="batches.length === 0">
                                 <td colspan="7" class="px-5 py-12 text-center text-sm text-muted-foreground">
@@ -619,7 +666,7 @@ function donateReviewedPhoto(): void {
                         <Percent class="size-4 text-amber-600 dark:text-amber-400" />
                         <div>
                             <h2 class="font-semibold text-foreground">Discount recommendations</h2>
-                            <p class="text-xs text-muted-foreground">AI suggestions are pending; no price is changed until approval.</p>
+                            <p class="text-xs text-muted-foreground">Products expiring in 4–6 days are added automatically; prices stay unchanged until approval.</p>
                         </div>
                     </div>
                     <div v-if="pendingApprovals.length" class="divide-y divide-sidebar-border/60">
@@ -635,7 +682,7 @@ function donateReviewedPhoto(): void {
                             </div>
                             <p class="text-sm text-foreground">{{ approval.quantity }} units · expires {{ approval.expiration_date }}</p>
                             <p class="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                                AI recommendation: {{ approval.recommended_percentage }}% · {{ formatCurrency(approval.recommended_price) }}
+                                Recommended discount: {{ approval.recommended_percentage }}% · {{ formatCurrency(approval.recommended_price) }}
                             </p>
                             <p class="text-xs text-muted-foreground">{{ approval.reasoning }}</p>
                         </article>
@@ -648,28 +695,29 @@ function donateReviewedPhoto(): void {
                         <Bot class="size-4 text-emerald-700 dark:text-emerald-400" />
                         <div>
                             <h2 class="font-semibold text-foreground">Recent agent activity</h2>
-                            <p class="text-xs text-muted-foreground">Latest recorded decisions and inventory actions.</p>
+                            <p class="text-xs text-muted-foreground">Latest AI actions, stock movements, sync decisions, and pending reviews.</p>
                         </div>
                     </div>
                     <div v-if="recentLogs.length" class="divide-y divide-sidebar-border/60">
                         <article v-for="log in recentLogs" :key="log.id" class="px-5 py-4">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-2">
-                                    <Tag class="size-3.5 text-muted-foreground" /><span class="text-sm font-semibold capitalize text-foreground">{{
-                                        log.action_type.replace('_', ' ')
-                                    }}</span>
+                                    <Tag class="size-3.5 text-muted-foreground" /><span class="text-sm font-semibold text-foreground">{{ activityLabel(log.action_type) }}</span>
                                 </div>
                                 <span class="text-xs text-muted-foreground">{{ log.created_at_human }}</span>
                             </div>
                             <p class="mt-1 text-sm text-foreground">
-                                {{ log.product?.name || 'Inventory event' }}<span v-if="log.partner?.name"> · {{ log.partner.name }}</span>
+                                {{ log.product?.name || 'Inventory event' }}<span v-if="log.batch_code"> · {{ log.batch_code }}</span><span v-if="log.partner?.name"> · {{ log.partner.name }}</span>
+                            </p>
+                            <p v-if="log.quantity !== null && log.quantity !== undefined" class="mt-1 text-xs font-medium text-foreground">
+                                {{ log.quantity }} {{ log.unit || 'units' }}<span v-if="log.status"> · {{ log.status }}</span>
                             </p>
                             <p class="mt-1 line-clamp-2 text-xs text-muted-foreground">{{ log.reasoning }}</p>
                         </article>
                     </div>
                     <div v-else class="flex flex-col items-center gap-2 px-5 py-10 text-center text-sm text-muted-foreground">
                         <Bot class="size-6" />
-                        <p>No agent activity has been recorded.</p>
+                        <p>No activity yet. This list records AI decisions, inventory changes, and reviews created by Sync Now or automatic sync.</p>
                     </div>
                     <div class="border-t border-sidebar-border px-5 py-3 text-right">
                         <Link href="/agent-logs" class="text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"

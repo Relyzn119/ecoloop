@@ -11,3 +11,8 @@ Artisan::command('inspire', function () {
 Schedule::command('ecoloop:sync-central-inventory')
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+Schedule::command('ecoloop:scan-donation-approvals')
+    ->everyFifteenMinutes()
+    ->timezone('Asia/Jakarta')
+    ->withoutOverlapping();
