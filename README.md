@@ -108,8 +108,6 @@ The following administrator account is provided for jury evaluation:
 | **Username** | `rotteyzn007` |
 | **Password** | `Admin123456` |
 
-**Login note:** The current application login form asks for an email address, and the backend validates email format. Confirm that this account is configured with a compatible login email before the demo; the username above may not be accepted by the current sign-in form.
-
 ## Run locally
 
 ### Prerequisites
