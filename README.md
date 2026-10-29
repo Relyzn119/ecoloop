@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/images/ecoloop-logo-light.png" alt="EcoLoop" width="210">
+  <img src="docs/assets/ecoloop-logo-light.png" alt="EcoLoop" width="210">
   <h1 style="color:#0b3b2e">Save food. Keep its value.</h1>
   <p><strong>Smart inventory management to reduce food waste.</strong></p>
   <p>EcoLoop helps retail teams spot food nearing its expiration date, review recommendations, and route eligible products toward discounts or donations.</p>
