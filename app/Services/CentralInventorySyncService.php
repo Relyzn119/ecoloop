@@ -9,6 +9,7 @@ use App\Models\InventorySyncRun;
 use App\Models\InventorySyncSetting;
 use App\Models\Product;
 use App\Models\ProductBatch;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -302,14 +303,40 @@ class CentralInventorySyncService
 
         $approvalService = app(ExpiringDonationApprovalService::class);
         $approvalEvents = [];
+        $automaticallyDonatedEvents = [];
         $approvalActionCount = 0;
+        $approvalActionsToNotify = collect();
+        $discountApprovalsToNotify = collect();
+        $automaticSchedulesToNotify = collect();
+        $automationSettings = InventorySyncSetting::query()->findOrFail(1);
+        $automationManager = $automationSettings->auto_decision_activated_by
+            ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $automationSettings->auto_decision_activated_by)
+            : null;
         foreach ($demoStock['batches'] as $batch) {
             $managerCount = $approvalService->createApprovalForBatch(
                 $batch,
                 false,
-                'Urgent demo batch created by Sync Now; manager approval is required before donation.'
+                'Urgent demo batch created by Sync Now; manager approval is required before donation.',
+                queueNotification: false
             );
             $approvalActionCount += $managerCount;
+            $approvalActionsToNotify = $approvalActionsToNotify->merge($approvalService->pendingActionsForBatch($batch->id));
+            $automaticSchedulesToNotify = $automaticSchedulesToNotify->merge($approvalService->automaticScheduledActionsForBatch($batch->id));
+            if ($managerCount > 0 && $automationSettings->auto_donation_enabled) {
+                $automaticallyDonatedEvents[] = [
+                    'batch_id' => $batch->id,
+                    'batch_code' => $batch->batch_code,
+                    'product_id' => $batch->product_id,
+                    'product_name' => $batch->product->name,
+                    'quantity' => $batch->quantity_received,
+                    'unit' => $batch->product->unit,
+                    'expiration_date' => $batch->expiration_date->toDateString(),
+                    'success' => true,
+                    'automatic' => true,
+                ];
+
+                continue;
+            }
             if ($managerCount > 0) {
                 $approvalEvents[] = [
                     'batch_id' => $batch->id,
@@ -336,7 +363,16 @@ class CentralInventorySyncService
                 ]
             );
             if ($approval->wasRecentlyCreated) {
-                app(NotificationService::class)->queueDiscountApproval($approval);
+                if ($automationSettings->auto_discount_enabled && $automationManager) {
+                    $approval = app(DiscountApprovalService::class)->decide(
+                        $approval->id,
+                        $automationManager,
+                        'approve',
+                        (int) $approval->recommended_percentage
+                    );
+                } else {
+                    $discountApprovalsToNotify->push($approval);
+                }
             }
             $discountEvents[] = [
                 'batch_id' => $batch->id,
@@ -364,8 +400,11 @@ class CentralInventorySyncService
                     'provider' => 'fallback',
                     'reasoning' => 'Demo pre-alert: batch kedaluwarsa tepat 3 hari lagi, tinjau untuk donasi besok.',
                     'recommended_donation_quantity' => $batch->quantity_available,
-                ]
+                ],
+                false
             );
+            $approvalActionsToNotify = $approvalActionsToNotify->merge($approvalService->pendingActionsForBatch($batch->id));
+            $automaticSchedulesToNotify = $automaticSchedulesToNotify->merge($approvalService->automaticScheduledActionsForBatch($batch->id));
             $preAlertEvents[] = [
                 'batch_id' => $batch->id,
                 'batch_code' => $batch->batch_code,
@@ -377,6 +416,9 @@ class CentralInventorySyncService
                 'manager_actions' => $managerCount,
             ];
         }
+
+        app(NotificationService::class)->queueInventoryReviewBatch($approvalActionsToNotify, $discountApprovalsToNotify);
+        app(NotificationService::class)->queueAutomaticDonationScheduleBatch($automaticSchedulesToNotify);
 
         $demoReceivedUnits = (int) collect($demoStock['receipt_events'])->sum('quantity');
         $summary = [
@@ -390,23 +432,23 @@ class CentralInventorySyncService
             'demo_new_products' => $demoStock['new_products'],
             'demo_discount_products' => count($discountEvents),
             'donation_prealerts_pending' => count(array_filter($preAlertEvents, fn (array $event): bool => $event['manager_actions'] > 0)),
-            'demo_donated_products' => 0,
-            'demo_donated_units' => 0,
+            'demo_donated_products' => count($automaticallyDonatedEvents),
+            'demo_donated_units' => (int) collect($automaticallyDonatedEvents)->sum('quantity'),
             'demo_partner_count' => $partners->count(),
             'demo_expected_products' => $demoBatchCount,
             'donation_approvals_pending' => count($approvalEvents),
-            'donated_units' => 0,
+            'donated_units' => (int) ($syncResult['donated_units'] ?? 0) + (int) collect($automaticallyDonatedEvents)->sum('quantity'),
         ];
 
         $donationError = $partners->isEmpty()
             ? 'No active foundation partner is configured; demo inventory candidates were created, but donation approvals could not be issued.'
-            : (count($approvalEvents) < $demoBatchCount
+            : (count($approvalEvents) + count($automaticallyDonatedEvents) < $demoBatchCount
                 ? 'No manager/cashier Telegram approval requests could be created. Link manager Telegram chat IDs and ensure at least one active foundation partner.'
                 : null);
         $details = $this->appendDemoAuditDetails(
             (int) $syncResult['sync_run_id'],
             $demoStock['receipt_events'],
-            [],
+            $automaticallyDonatedEvents,
             array_map(
                 fn (ProductBatch $batch): int => $batch->product_id,
                 [...$demoStock['batches'], ...$demoStock['discount_batches'], ...$demoStock['prealert_batches']]
@@ -434,8 +476,8 @@ class CentralInventorySyncService
             ...$syncResult,
             'details' => $details,
             ...$summary,
-            'demo_donated_products' => 0,
-            'demo_donated_units' => 0,
+            'demo_donated_products' => count($automaticallyDonatedEvents),
+            'demo_donated_units' => (int) collect($automaticallyDonatedEvents)->sum('quantity'),
             'demo_partner_count' => $partners->count(),
             'demo_expected_products' => $demoBatchCount,
             'demo_approval_actions' => $approvalActionCount,

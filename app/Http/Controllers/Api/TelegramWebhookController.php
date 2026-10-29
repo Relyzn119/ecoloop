@@ -41,6 +41,14 @@ class TelegramWebhookController extends Controller
                 // they usually match; in groups the chat ID must not be used for authorization.
                 $user = $this->authorizedUser((string) $callback['from']['id']);
                 $chatId = (string) $callback['message']['chat']['id'];
+                if (preg_match('/^eco:auto:(arm|activate|cancel):([0-9a-f-]{36})$/i', $callback['data'], $autoMatch) === 1) {
+                    $result = $aiActions->decideAutomationPolicy($autoMatch[2], $user, $chatId, strtolower($autoMatch[1]));
+                    $telegram->answerCallback((string) $callback['id'], 'EcoLoop memeriksa persetujuan otomatisasi.');
+                    $telegram->sendMessage($chatId, $result['text'], $result['reply_markup']);
+
+                    return response()->json(['ok' => true, 'automation_action_id' => $autoMatch[2]]);
+                }
+
                 if (preg_match('/^eco:partner-stock:(reduce|keep):([0-9a-f-]{36})$/i', $callback['data'], $partnerStockMatch) === 1) {
                     $resultMessage = $partnerClaims->decideStock(
                         $partnerStockMatch[2],

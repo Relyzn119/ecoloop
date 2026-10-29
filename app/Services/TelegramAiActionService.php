@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\AgentLog;
+use App\Models\InventorySyncSetting;
 use App\Models\ProductBatch;
 use App\Models\TelegramAiAction;
 use App\Models\User;
@@ -12,6 +14,131 @@ use Illuminate\Support\Facades\DB;
 class TelegramAiActionService
 {
     public function __construct(private readonly NotificationService $notifications) {}
+
+    /** @return array{text: string, reply_markup: array<string, mixed>|null} */
+    public function decideAutomationPolicy(string $actionId, User $user, string $chatId, string $decision): array
+    {
+        if (! in_array($user->role, ['business_owner', 'manager'], true)) {
+            throw new AuthorizationException('Only a business owner or manager may change automatic inventory policies.');
+        }
+        if (! in_array($decision, ['arm', 'activate', 'cancel'], true)) {
+            throw new AuthorizationException('Unknown automation policy confirmation.');
+        }
+
+        return DB::transaction(function () use ($actionId, $user, $chatId, $decision): array {
+            $action = TelegramAiAction::query()->lockForUpdate()->findOrFail($actionId);
+            if ($action->action_type !== 'automation_policy'
+                || (int) $action->requested_by !== (int) $user->id
+                || ! hash_equals($action->telegram_chat_id, $chatId)) {
+                throw new AuthorizationException('This automatic policy request belongs to another manager chat.');
+            }
+
+            if ($decision === 'cancel') {
+                if (! in_array($action->status, ['pending', 'cooldown'], true)) {
+                    return ['text' => 'Permintaan otomatisasi ini sudah diproses.', 'reply_markup' => null];
+                }
+                $action->update(['status' => 'cancelled', 'decided_by' => $user->id, 'completed_at' => now()]);
+
+                return ['text' => 'Aktivasi otomatisasi dibatalkan. Tidak ada kebijakan yang berubah.', 'reply_markup' => null];
+            }
+
+            if ($action->expires_at?->isPast()) {
+                $action->update(['status' => 'expired', 'completed_at' => now()]);
+
+                return ['text' => 'Permintaan aktivasi kedaluwarsa. Tidak ada kebijakan yang berubah; ajukan permintaan baru bila masih diperlukan.', 'reply_markup' => null];
+            }
+
+            $payload = $action->payload ?? [];
+            if ($decision === 'arm') {
+                if ($action->status !== 'pending') {
+                    return ['text' => 'Tahap konfirmasi pertama sudah dilewati atau permintaan tidak lagi aktif.', 'reply_markup' => null];
+                }
+                $availableAt = now()->addSeconds(5);
+                $payload['confirmation_available_at'] = $availableAt->toIso8601String();
+                $action->update(['status' => 'cooldown', 'payload' => $payload]);
+
+                return [
+                    'text' => 'Jeda 5 detik dimulai. Setelah jeda selesai, tekan “Aktifkan otomatis” untuk menerapkan kebijakan. Anda masih dapat membatalkan.',
+                    'reply_markup' => ['inline_keyboard' => [[
+                        ['text' => 'Aktifkan otomatis', 'callback_data' => 'eco:auto:activate:'.$action->id],
+                        ['text' => 'Batalkan', 'callback_data' => 'eco:auto:cancel:'.$action->id],
+                    ]]],
+                ];
+            }
+
+            if ($action->status !== 'cooldown') {
+                return ['text' => 'Tekan “Mulai konfirmasi 5 detik” terlebih dahulu. Tidak ada kebijakan yang berubah.', 'reply_markup' => null];
+            }
+
+            $availableAt = Carbon::parse((string) ($payload['confirmation_available_at'] ?? now()->addDay()->toIso8601String()));
+            if ($availableAt->isFuture()) {
+                return [
+                    'text' => 'Jeda 5 detik belum selesai. Tunggu sebentar lalu tekan “Aktifkan otomatis” lagi. Kebijakan belum berubah.',
+                    'reply_markup' => ['inline_keyboard' => [[
+                        ['text' => 'Aktifkan otomatis', 'callback_data' => 'eco:auto:activate:'.$action->id],
+                        ['text' => 'Batalkan', 'callback_data' => 'eco:auto:cancel:'.$action->id],
+                    ]]],
+                ];
+            }
+
+            $settings = InventorySyncSetting::query()->lockForUpdate()->findOrFail(1);
+            $fields = [
+                'donation' => 'auto_donation_enabled',
+                'discount' => 'auto_discount_enabled',
+                'donation_prealert' => 'auto_donation_prealert_enabled',
+            ];
+            $enabled = (bool) ($payload['enabled'] ?? false);
+            $scopes = array_values(array_intersect((array) ($payload['scopes'] ?? []), array_keys($fields)));
+            if ($scopes === []) {
+                throw new AuthorizationException('No valid automatic policy scope was requested.');
+            }
+            foreach ($scopes as $scope) {
+                $settings->{$fields[$scope]} = $enabled;
+            }
+            $anyAutomationRemainsEnabled = $settings->auto_donation_enabled
+                || $settings->auto_discount_enabled
+                || $settings->auto_donation_prealert_enabled;
+            if ($enabled) {
+                $settings->auto_decision_activated_by = $user->id;
+                $settings->auto_decision_activated_at = now();
+            } elseif (! $anyAutomationRemainsEnabled) {
+                $settings->auto_decision_activated_by = null;
+                $settings->auto_decision_activated_at = null;
+            }
+            $settings->save();
+
+            AgentLog::query()->create([
+                'action_type' => $enabled ? 'automation_policy_enabled' : 'automation_policy_disabled',
+                'reasoning' => sprintf('Automatic inventory policy %s by %s after two Telegram confirmations and a 5-second cooldown.', $enabled ? 'enabled' : 'disabled', $user->name),
+                'payload' => [
+                    'scopes' => $scopes,
+                    'enabled' => $enabled,
+                    'actor_id' => $user->id,
+                    'telegram_chat_id' => $chatId,
+                    'confirmation_delay_seconds' => 5,
+                ],
+                'status' => 'success',
+            ]);
+
+            $action->update([
+                'status' => 'completed',
+                'decided_by' => $user->id,
+                'completed_at' => now(),
+                'result' => ['enabled' => $enabled, 'scopes' => $scopes],
+            ]);
+
+            $labels = collect($scopes)->map(fn (string $scope): string => match ($scope) {
+                'donation' => 'donasi 0–2 hari',
+                'discount' => 'approval diskon AI',
+                'donation_prealert' => 'pre-alert donasi besok',
+            })->implode(', ');
+
+            return [
+                'text' => sprintf('Kebijakan otomatis %s berhasil untuk: %s. Pengaturan global dicatat oleh %s.', $enabled ? 'diaktifkan' : 'dinonaktifkan', $labels, $user->name),
+                'reply_markup' => null,
+            ];
+        });
+    }
 
     public function decide(string $actionId, User $user, string $chatId, string $decision): string
     {
@@ -266,11 +393,29 @@ class TelegramAiActionService
             if ($eligibleOn->gt(now('Asia/Jakarta')->startOfDay())) {
                 return null;
             }
+            $settings = InventorySyncSetting::query()->findOrFail(1);
+            $automaticScopeEnabled = ($payload['prealert_auto'] ?? false)
+                ? ($settings->auto_donation_prealert_enabled || $settings->auto_donation_enabled)
+                : $settings->auto_donation_enabled;
+            if (($payload['automation_policy'] ?? false) === true && ! $automaticScopeEnabled) {
+                $payload['stage'] = 'eligible';
+                $payload['automation_policy'] = false;
+                $payload['preapproved'] = false;
+                $payload['prealert_auto'] = false;
+                $action->update(['status' => 'pending', 'payload' => $payload]);
+
+                return $action->fresh();
+            }
             $action->update(['status' => 'processing']);
 
             return $action->fresh();
         });
         if (! $action) {
+            return;
+        }
+        if ($action->status === 'pending') {
+            $this->notifications->queueDonationApprovalBatch([$action]);
+
             return;
         }
 
@@ -333,7 +478,8 @@ class TelegramAiActionService
             $quantity,
             $managerId,
             $action->id,
-            $deductStock
+            $deductStock,
+            ($payload['automation_policy'] ?? false) === true
         );
 
         if (! $result['success']) {

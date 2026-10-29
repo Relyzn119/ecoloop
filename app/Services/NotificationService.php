@@ -148,51 +148,235 @@ class NotificationService
     /** Queue one actionable near-expiry donation review to a manager Telegram account. */
     public function queueDonationApproval(TelegramAiAction $action, ProductBatch $batch, bool $preAlert): void
     {
-        $batch->loadMissing('product');
-        $product = $batch->product;
-        $payload = $action->payload ?? [];
-        $quantity = (int) ($payload['recommended_quantity'] ?? $batch->quantity_available);
-        $date = $batch->expiration_date->toDateString();
-        $text = sprintf(
-            "%s\n%s (%s), batch %s\nRekomendasi AI: %d %s\nStok tersedia: %d %s\nKedaluwarsa: %s\nAlasan: %s\n\nPilih jumlah rekomendasi, atur jumlah sendiri, atau batalkan donasi. Jika memilih jumlah sendiri, kirim: /donasi %s JUMLAH kurangi|tetap",
-            $preAlert ? 'EcoLoop: perkiraan donasi besok' : 'EcoLoop: persetujuan donasi diperlukan',
-            $product->name,
-            $product->sku,
-            $batch->batch_code,
-            $quantity,
-            $product->unit,
-            $batch->quantity_available,
-            $product->unit,
-            $date,
-            (string) ($payload['reasoning'] ?? 'Batch mendekati tanggal kedaluwarsa.'),
-            $action->id
-        );
+        $this->queueInventoryReviewBatch(collect([$action]), collect());
+    }
 
-        $rows = [];
-        $suffix = ':'.$action->id;
-        if ($preAlert) {
-            $rows[] = [
-                ['text' => 'Setujui besok · kurangi stok', 'callback_data' => 'eco:donation:reduce'.$suffix],
-                ['text' => 'Setujui besok · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
-            ];
-            $rows[] = [
-                ['text' => 'Tentukan jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix],
-                ['text' => 'Tinjau besok', 'callback_data' => 'eco:donation:defer'.$suffix],
-            ];
-        } else {
-            $rows[] = [
-                ['text' => 'Donasi AI · kurangi stok', 'callback_data' => 'eco:donation:reduce'.$suffix],
-                ['text' => 'Donasi AI · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
-            ];
-            $rows[] = [['text' => 'Tentukan jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix]];
+    /** Queue grouped donation decisions using the unified manager summary. */
+    public function queueDonationApprovalBatch(iterable $actions): void
+    {
+        $this->queueInventoryReviewBatch($actions, []);
+    }
+
+    /** Queue grouped discount decisions using the unified manager summary. */
+    public function queueDiscountApprovalBatch(iterable $approvals): void
+    {
+        $this->queueInventoryReviewBatch([], $approvals);
+    }
+
+    /** Queue one manager summary containing donation and discount decisions with per-item buttons. */
+    public function queueInventoryReviewBatch(iterable $donationActions, iterable $discountApprovals): void
+    {
+        $donationActions = collect($donationActions)
+            ->filter(fn ($action): bool => $action instanceof TelegramAiAction);
+        $discountApprovals = collect($discountApprovals)
+            ->filter(fn ($approval): bool => $approval instanceof DiscountApproval);
+        $entriesByChat = [];
+
+        foreach ($donationActions->groupBy('telegram_chat_id') as $chatId => $chatActions) {
+            $batchIds = $chatActions
+                ->map(fn (TelegramAiAction $action): int => (int) ($action->payload['batch_id'] ?? 0))
+                ->filter()
+                ->unique()
+                ->values();
+            $batches = ProductBatch::query()
+                ->with('product')
+                ->whereIn('id', $batchIds)
+                ->get()
+                ->keyBy('id');
+
+            foreach ($chatActions
+                ->filter(fn (TelegramAiAction $action): bool => $batches->has((int) ($action->payload['batch_id'] ?? 0)))
+                ->sortBy(fn (TelegramAiAction $action): string => sprintf(
+                    '%s-%s',
+                    $batches[(int) $action->payload['batch_id']]->expiration_date->toDateString(),
+                    $batches[(int) $action->payload['batch_id']]->batch_code
+                ))
+                ->values() as $action) {
+                $entriesByChat[(string) $chatId]['donations'][] = [$action, $batches[(int) $action->payload['batch_id']]];
+            }
         }
-        $rows[] = [['text' => 'Jangan donasikan batch ini', 'callback_data' => 'eco:donation:reject'.$suffix]];
 
-        $this->queueDelivery('donation_approval', 'telegram', $action->telegram_chat_id, null, [
-            'text' => $text,
-            'reply_markup' => ['inline_keyboard' => $rows],
-            'product_id' => $product->id,
-        ], 'donation-approval:'.$action->id.':'.($payload['stage'] ?? 'eligible').':'.($payload['notification_date'] ?? now('Asia/Jakarta')->toDateString()));
+        if ($discountApprovals->isNotEmpty()) {
+            $recipients = User::query()->notificationRecipients()->whereNotNull('telegram_chat_id')->get(['id', 'telegram_chat_id']);
+            foreach ($recipients as $user) {
+                foreach ($discountApprovals as $approval) {
+                    $entriesByChat[(string) $user->telegram_chat_id]['discounts'][] = $approval;
+                }
+            }
+        }
+
+        foreach ($entriesByChat as $chatId => $groups) {
+            $donations = collect($groups['donations'] ?? []);
+            $discounts = collect($groups['discounts'] ?? [])->unique('id')->values();
+            $entries = collect();
+            foreach ($donations as [$action, $batch]) {
+                $entries->push(['type' => 'donation', 'action' => $action, 'batch' => $batch]);
+            }
+            foreach ($discounts as $approval) {
+                $entries->push(['type' => 'discount', 'approval' => $approval]);
+            }
+
+            foreach ($entries->chunk(15) as $chunkIndex => $chunk) {
+                $lines = [];
+                $keyboard = [];
+                $dedupeParts = [];
+                $firstProductId = null;
+                $hasDonation = false;
+                $hasDiscount = false;
+
+                foreach ($chunk->values() as $index => $action) {
+                    $number = $index + 1;
+                    if ($action['type'] === 'donation') {
+                        /** @var TelegramAiAction $donationAction */
+                        $donationAction = $action['action'];
+                        /** @var ProductBatch $batch */
+                        $batch = $action['batch'];
+                        $product = $batch->product;
+                        $payload = $donationAction->payload ?? [];
+                        if (! $product) {
+                            continue;
+                        }
+                        $hasDonation = true;
+                        $quantity = (int) ($payload['recommended_quantity'] ?? $batch->quantity_available);
+                        $preAlert = ($payload['stage'] ?? null) === 'prealert';
+                        $when = $preAlert ? 'DONASI BESOK - menunggu pilihan owner/manager' : 'DONASI SEGERA - menunggu persetujuan';
+                        $lines[] = sprintf(
+                            '%d. DONASI · %s (%s), batch %s · %d %s dari %d %s · exp %s · %s',
+                            $number,
+                            $product->name,
+                            $product->sku,
+                            $batch->batch_code,
+                            $quantity,
+                            $product->unit,
+                            $batch->quantity_available,
+                            $product->unit,
+                            $batch->expiration_date->toDateString(),
+                            $when
+                        );
+
+                        $suffix = ':'.$donationAction->id;
+                        if ($preAlert) {
+                            $keyboard[] = [
+                                ['text' => '#'.$number.' Besok · kurangi', 'callback_data' => 'eco:donation:reduce'.$suffix],
+                                ['text' => '#'.$number.' Besok · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
+                            ];
+                            $keyboard[] = [
+                                ['text' => '#'.$number.' Jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix],
+                                ['text' => '#'.$number.' Tinjau besok', 'callback_data' => 'eco:donation:defer'.$suffix],
+                            ];
+                        } else {
+                            $keyboard[] = [
+                                ['text' => '#'.$number.' Donasi · kurangi', 'callback_data' => 'eco:donation:reduce'.$suffix],
+                                ['text' => '#'.$number.' Donasi · stok tetap', 'callback_data' => 'eco:donation:keep'.$suffix],
+                            ];
+                            $keyboard[] = [['text' => '#'.$number.' Jumlah sendiri', 'callback_data' => 'eco:donation:custom'.$suffix]];
+                        }
+                        $keyboard[] = [['text' => '#'.$number.' Lewati batch ini', 'callback_data' => 'eco:donation:reject'.$suffix]];
+                        $dedupeParts[] = 'donation:'.$donationAction->id.':'.($payload['notification_date'] ?? now('Asia/Jakarta')->toDateString());
+                        $firstProductId ??= $product->id;
+                    } else {
+                        /** @var DiscountApproval $approval */
+                        $approval = $action['approval'];
+                        $approval->loadMissing(['product', 'batch']);
+                        if (! $approval->product || ! $approval->batch) {
+                            continue;
+                        }
+                        $hasDiscount = true;
+                        $lines[] = sprintf(
+                            "%d. DISKON · %s (%s), batch %s · stok %d %s · exp %s · rekomendasi %d%% (Rp %s)\n   Alasan: %s · ubah sendiri: /discount %d 25",
+                            $number,
+                            $approval->product->name,
+                            $approval->product->sku,
+                            $approval->batch->batch_code,
+                            $approval->batch->quantity_available,
+                            $approval->product->unit,
+                            $approval->batch->expiration_date->toDateString(),
+                            $approval->recommended_percentage,
+                            number_format((float) $approval->recommended_price, 0, ',', '.'),
+                            $approval->reasoning,
+                            $approval->id
+                        );
+                        $keyboard[] = [[
+                            'text' => '#'.$number.' Setujui '.$approval->recommended_percentage.'%',
+                            'callback_data' => 'approve:'.$approval->id,
+                        ], [
+                            'text' => '#'.$number.' Tolak diskon',
+                            'callback_data' => 'reject:'.$approval->id,
+                        ]];
+                        $dedupeParts[] = 'discount:'.$approval->id;
+                        $firstProductId ??= $approval->product_id;
+                    }
+                }
+
+                if ($lines === []) {
+                    continue;
+                }
+
+                $text = "EcoLoop · Ringkasan keputusan inventaris\nPilih tindakan untuk tiap produk. Diskon dan donasi belum dijalankan sampai disetujui.\n\n";
+                if ($hasDonation) {
+                    $text .= "DONASI / PRE-ALERT\n";
+                }
+                if ($hasDiscount) {
+                    $text .= "DISKON MENUNGGU PERSETUJUAN\n";
+                }
+                $text .= implode("\n", $lines);
+                $dedupe = 'inventory-review-batch:'.sha1((string) $chatId.':'.$chunkIndex.':'.implode('|', $dedupeParts));
+                $this->queueDelivery('inventory_review_summary', 'telegram', (string) $chatId, null, [
+                    'text' => $text,
+                    'reply_markup' => ['inline_keyboard' => $keyboard],
+                    'product_id' => $firstProductId,
+                ], $dedupe, 'approval');
+            }
+        }
+    }
+
+    /** Notify managers in grouped Telegram messages about pre-approved donations scheduled for tomorrow. */
+    public function queueAutomaticDonationScheduleBatch(iterable $actions): void
+    {
+        $actions = collect($actions)
+            ->filter(fn ($action): bool => $action instanceof TelegramAiAction && ($action->payload['stage'] ?? null) === 'auto_preapproved');
+        if ($actions->isEmpty()) {
+            return;
+        }
+
+        $batchIds = $actions->map(fn (TelegramAiAction $action): int => (int) ($action->payload['batch_id'] ?? 0))->filter()->unique();
+        $batches = ProductBatch::query()->with('product')->whereIn('id', $batchIds)->get()->keyBy('id');
+        $recipients = User::query()->notificationRecipients()->whereNotNull('telegram_chat_id')->get(['id', 'telegram_chat_id']);
+
+        foreach ($recipients as $recipient) {
+            foreach ($actions->chunk(15) as $chunkIndex => $chunk) {
+                $lines = [];
+                $actionIds = [];
+                $firstProductId = null;
+                foreach ($chunk as $action) {
+                    $batch = $batches->get((int) ($action->payload['batch_id'] ?? 0));
+                    if (! $batch?->product) {
+                        continue;
+                    }
+                    $lines[] = sprintf(
+                        '• %s (%s), batch %s — %d %s — kedaluwarsa %s',
+                        $batch->product->name,
+                        $batch->product->sku,
+                        $batch->batch_code,
+                        (int) ($action->payload['quantity'] ?? $batch->quantity_available),
+                        $batch->product->unit,
+                        $batch->expiration_date->toDateString()
+                    );
+                    $actionIds[] = $action->id;
+                    $firstProductId ??= $batch->product_id;
+                }
+                if ($lines === []) {
+                    continue;
+                }
+
+                $text = "EcoLoop · Donasi otomatis dijadwalkan\nSesuai kebijakan otomatis yang disetujui owner/manager, produk berikut akan didonasikan besok dan stok dikurangi saat eksekusi:\n\n".implode("\n", $lines);
+                $dedupe = 'auto-donation-schedule:'.sha1($recipient->telegram_chat_id.':'.$chunkIndex.':'.implode('|', $actionIds));
+                $this->queueDelivery('automatic_donation_scheduled', 'telegram', $recipient->telegram_chat_id, null, [
+                    'text' => $text,
+                    'product_id' => $firstProductId,
+                ], $dedupe);
+            }
+        }
     }
 
     public function queueTelegramActionResult(string $chatId, string $text, string $reference): void
@@ -332,34 +516,7 @@ class NotificationService
     /** Queue an approval request with Telegram buttons and a custom discount command. */
     public function queueDiscountApproval(DiscountApproval $approval): void
     {
-        $approval->loadMissing(['product', 'batch']);
-        $product = $approval->product;
-        $batch = $approval->batch;
-        $text = sprintf(
-            "Discount approval required\n%s (%s), batch %s\nStock: %d %s\nExpires: %s\nRecommended discount: %d%% (price %s)\nReason: %s\n\nChoose an action. For a custom rate, reply: /discount %d 25",
-            $product->name,
-            $product->sku,
-            $batch->batch_code,
-            $batch->quantity_available,
-            $product->unit,
-            $batch->expiration_date->toDateString(),
-            $approval->recommended_percentage,
-            number_format((float) $approval->recommended_price, 2),
-            $approval->reasoning,
-            $approval->id
-        );
-        $keyboard = ['inline_keyboard' => [[
-            ['text' => 'Approve AI '.$approval->recommended_percentage.'%', 'callback_data' => 'approve:'.$approval->id],
-            ['text' => 'Reject', 'callback_data' => 'reject:'.$approval->id],
-        ]]];
-
-        foreach (User::query()->notificationRecipients()->whereNotNull('telegram_chat_id')->get(['id', 'telegram_chat_id']) as $user) {
-            $this->queueDelivery('discount_approval', 'telegram', $user->telegram_chat_id, null, [
-                'text' => $text,
-                'reply_markup' => $keyboard,
-                'product_id' => $product->id,
-            ], "approval:{$approval->id}:user:{$user->id}:telegram", 'approval');
-        }
+        $this->queueDiscountApprovalBatch([$approval]);
     }
 
     /** Notify every active UMKM partner when a discount has been approved and is available. */
