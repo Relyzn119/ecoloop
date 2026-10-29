@@ -86,11 +86,11 @@ Laravel remains the source of truth for inventory and action rules. If the gatew
 
 > **Automation status:** The application also includes Laravel scheduling for periodic demo inventory sync and donation-approval scans. The n8n workflow files stored in this repository are inactive by default. Check the target deployment before assuming an n8n schedule or callback is running.
 
-## Intended SDG contributions
+## Intended SDGs contributions
 
-EcoLoop aims to reduce avoidable waste of edible food and recover value from inventory. The SDG links below describe intended contribution pathways; actual impact must be supported by operational data.
+EcoLoop aims to reduce avoidable waste of edible food and recover value from inventory. The SDGs links below describe intended contribution pathways; actual impact must be supported by operational data.
 
-| SDG | How EcoLoop aligns |
+| SDGs | How EcoLoop aligns |
 |:--|:--|
 | **SDG 12 — Responsible Consumption and Production** | Direct alignment: improve shelf-life visibility and help route products to sale or donation before they become waste. |
 | **SDG 17 — Partnerships for the Goals** | Direct alignment: connect retailers, social partners, and digital workflows for coordinated handoffs. |
