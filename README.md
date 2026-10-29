@@ -18,6 +18,13 @@
 
 ---
 
+## Landing page
+
+<div align="center">
+  <img src="docs/assets/ecoloop-landing-page.png" alt="EcoLoop landing page showing the Save food. Keep its value. hero and dashboard preview" width="100%">
+  <br><sub>The EcoLoop landing page brings together food rescue, inventory visibility, and reviewable actions.</sub>
+</div>
+
 ## About EcoLoop
 
 EcoLoop is a web platform that helps retailers manage products and inventory batches by stock quantity and expiration date. Teams can review at-risk products, consider markdowns, and connect eligible surplus food with donation partners. Recommendations and follow-up actions are recorded so decisions can be reviewed.
