@@ -6,6 +6,7 @@ use App\Http\Resources\AgentLogResource;
 use App\Models\AgentLog;
 use App\Models\DiscountApproval;
 use App\Models\DonationPartner;
+use App\Models\InventorySyncRun;
 use App\Models\ProductBatch;
 use App\Services\AiAgentService;
 use App\Services\InventoryService;
@@ -82,6 +83,80 @@ class SimulationController extends Controller
             ->limit(10)
             ->get();
 
+        $recentActivity = AgentLogResource::collection($recentLogs)->resolve($request);
+        $syncEventTypes = [
+            'received' => 'stock_received',
+            'sold' => 'stock_sold',
+            'demo_received' => 'stock_received',
+            'donated' => 'donation_requested',
+            'discount_approvals' => 'discount_recommendation',
+            'donation_approvals' => 'donation_approval',
+            'donation_prealerts' => 'donation_prealert',
+        ];
+
+        InventorySyncRun::query()
+            ->whereIn('status', ['completed', 'partial'])
+            ->latest('id')
+            ->limit(5)
+            ->get(['id', 'started_at', 'completed_at', 'details'])
+            ->each(function (InventorySyncRun $run) use (&$recentActivity, $syncEventTypes): void {
+                foreach ($syncEventTypes as $eventGroup => $actionType) {
+                    foreach (($run->details['events'][$eventGroup] ?? []) as $index => $event) {
+                        if (! is_array($event)) {
+                            continue;
+                        }
+
+                        $quantity = $event['quantity'] ?? $event['quantity_available'] ?? null;
+                        $status = $event['status'] ?? match ($eventGroup) {
+                            'received', 'sold', 'demo_received' => 'success',
+                            'donated' => ($event['success'] ?? false) ? 'success' : 'pending',
+                            'discount_approvals' => 'pending',
+                            'donation_approvals', 'donation_prealerts' => 'pending',
+                            default => 'recorded',
+                        };
+                        $reasoning = match ($eventGroup) {
+                            'received', 'demo_received' => 'Stock received from inventory synchronization.',
+                            'sold' => 'Point-of-sale stock reduction synchronized.',
+                            'donated' => ($event['automatic'] ?? false)
+                                ? 'Automatically donated under the active product policy.'
+                                : 'Donation recorded during inventory synchronization.',
+                            'discount_approvals' => sprintf(
+                                '%s%% discount recommendation · %s approval.',
+                                (int) ($event['recommended_percentage'] ?? 0),
+                                $status
+                            ),
+                            'donation_approvals' => 'Donation candidate is waiting for manager review.',
+                            'donation_prealerts' => 'Donation candidate is forecast for tomorrow.',
+                            default => 'Inventory event recorded during synchronization.',
+                        };
+
+                        $recentActivity[] = [
+                            'id' => "sync-{$run->id}-{$eventGroup}-{$index}",
+                            'action_type' => $actionType,
+                            'reasoning' => $reasoning,
+                            'status' => $status,
+                            'created_at' => ($run->completed_at ?? $run->started_at)?->toIso8601String(),
+                            'created_at_human' => ($run->completed_at ?? $run->started_at)?->diffForHumans() ?? 'Recently',
+                            'quantity' => $quantity !== null ? (int) $quantity : null,
+                            'unit' => $event['unit'] ?? null,
+                            'batch_code' => $event['batch_code'] ?? null,
+                            'product' => ! empty($event['product_id']) || ! empty($event['product_name']) ? [
+                                'id' => $event['product_id'] ?? null,
+                                'name' => $event['product_name'] ?? 'Inventory event',
+                                'sku' => $event['sku'] ?? null,
+                            ] : null,
+                            'partner' => null,
+                        ];
+                    }
+                }
+            });
+
+        $recentActivity = collect($recentActivity)
+            ->sortByDesc(fn (array $activity): int => strtotime((string) ($activity['created_at'] ?? '')) ?: 0)
+            ->take(10)
+            ->values()
+            ->all();
+
         $partners = DonationPartner::query()
             ->active()
             ->orderBy('name')
@@ -96,7 +171,7 @@ class SimulationController extends Controller
             'batches' => $batches,
             'donationPartners' => $partners,
             'pendingApprovals' => $pendingApprovals,
-            'recentLogs' => AgentLogResource::collection($recentLogs),
+            'recentLogs' => $recentActivity,
             'lastUpdatedAt' => now()->toIso8601String(),
             'visionResult' => $request->session()->get('visionResult'),
         ]);

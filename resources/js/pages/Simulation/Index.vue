@@ -54,11 +54,14 @@ interface DiscountApprovalItem {
 }
 
 interface AgentLogItem {
-    id: number;
+    id: number | string;
     action_type: string;
     reasoning: string;
     status: string;
     created_at_human: string;
+    quantity?: number | null;
+    unit?: string | null;
+    batch_code?: string | null;
     product?: { id: number; name: string; sku: string } | null;
     partner?: { id: number | null; name: string } | null;
 }
@@ -157,6 +160,23 @@ function refreshData(): void {
 
 function formatCurrency(value: number): string {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
+}
+
+function activityLabel(actionType: string): string {
+    const labels: Record<string, string> = {
+        stock_received: 'Stock received',
+        stock_sold: 'Stock sold',
+        donation_requested: 'Donation',
+        donation_approval: 'Donation review',
+        donation_prealert: 'Donation forecast',
+        discount_recommendation: 'Discount recommendation',
+        discount_applied: 'Discount applied',
+        discount_rejected: 'Discount rejected',
+        alert_sent: 'Notification sent',
+        manual_override: 'Manual change',
+    };
+
+    return labels[actionType] ?? actionType.replaceAll('_', ' ');
 }
 
 function expiryLabel(days: number): string {
@@ -675,28 +695,29 @@ function claimReviewedPhoto(): void {
                         <Bot class="size-4 text-emerald-700 dark:text-emerald-400" />
                         <div>
                             <h2 class="font-semibold text-foreground">Recent agent activity</h2>
-                            <p class="text-xs text-muted-foreground">Latest recorded decisions and inventory actions.</p>
+                            <p class="text-xs text-muted-foreground">Latest AI actions, stock movements, sync decisions, and pending reviews.</p>
                         </div>
                     </div>
                     <div v-if="recentLogs.length" class="divide-y divide-sidebar-border/60">
                         <article v-for="log in recentLogs" :key="log.id" class="px-5 py-4">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center gap-2">
-                                    <Tag class="size-3.5 text-muted-foreground" /><span class="text-sm font-semibold capitalize text-foreground">{{
-                                        log.action_type.replace('_', ' ')
-                                    }}</span>
+                                    <Tag class="size-3.5 text-muted-foreground" /><span class="text-sm font-semibold text-foreground">{{ activityLabel(log.action_type) }}</span>
                                 </div>
                                 <span class="text-xs text-muted-foreground">{{ log.created_at_human }}</span>
                             </div>
                             <p class="mt-1 text-sm text-foreground">
-                                {{ log.product?.name || 'Inventory event' }}<span v-if="log.partner?.name"> · {{ log.partner.name }}</span>
+                                {{ log.product?.name || 'Inventory event' }}<span v-if="log.batch_code"> · {{ log.batch_code }}</span><span v-if="log.partner?.name"> · {{ log.partner.name }}</span>
+                            </p>
+                            <p v-if="log.quantity !== null && log.quantity !== undefined" class="mt-1 text-xs font-medium text-foreground">
+                                {{ log.quantity }} {{ log.unit || 'units' }}<span v-if="log.status"> · {{ log.status }}</span>
                             </p>
                             <p class="mt-1 line-clamp-2 text-xs text-muted-foreground">{{ log.reasoning }}</p>
                         </article>
                     </div>
                     <div v-else class="flex flex-col items-center gap-2 px-5 py-10 text-center text-sm text-muted-foreground">
                         <Bot class="size-6" />
-                        <p>No agent activity has been recorded.</p>
+                        <p>No activity yet. This list records AI decisions, inventory changes, and reviews created by Sync Now or automatic sync.</p>
                     </div>
                     <div class="border-t border-sidebar-border px-5 py-3 text-right">
                         <Link href="/agent-logs" class="text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
