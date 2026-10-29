@@ -65,7 +65,7 @@ Store owners may also grant operational access to staff through manager or cashi
 | **Vue 3 + Inertia** | Dashboard, partner portal, simulation, and user workflows. |
 | **9Router** | OpenAI-compatible gateway that forwards requests to a configured AI model, including a vision model for photo analysis. Credentials and model settings must be configured for each environment. |
 | **AI agent + Telegram** | The agent connects to a Telegram webhook for conversations and inventory follow-up. Managers can review and confirm requests that require approval. |
-| **n8n** | The active VPS workflow, **EcoLoop Laravel Event Observer**, receives finalized `donation.completed` and `discount.approved` events from Laravel at `POST /webhook/ecoloop-laravel-events`, validates them, and acknowledges valid events. It does not make inventory or approval decisions. |
+| **n8n** | The active VPS workflow, **EcoLoop Laravel Event Observer**, receives finalized `donation.completed` and `discount.approved` events from Laravel at `POST /webhook/ecoloop-laravel-events`, validates each event, and acknowledges valid payloads. |
 | **MySQL / SQLite** | Application storage, depending on local configuration. |
 
 ### AI decision flow
@@ -84,9 +84,9 @@ Approved discount or donation → Laravel audit record
 n8n validates and acknowledges the final event
 ```
 
-After Laravel finalizes a donation or discount, it sends a read-only event to the active n8n observer. The observer responds with HTTP 202 for a valid event or HTTP 400 for an invalid payload. Laravel remains the source of truth and carries out the inventory update, approval, and notification. If the gateway or model is unavailable, or a photo result is unclear, the vision flow falls back to manual review. AI can provide context, but a photo alone cannot confirm freshness, contamination, smell, or food safety.
+After Laravel finalizes a donation or discount, it sends an event to the active n8n observer. The observer validates the event and responds with HTTP 202 when it is valid or HTTP 400 when the payload is invalid. If the gateway or model is unavailable, or a photo result is unclear, the vision flow falls back to manual review. AI can provide context, but a photo alone cannot confirm freshness, contamination, smell, or food safety.
 
-> **Automation status:** The VPS runs an active n8n workflow named **EcoLoop Laravel Event Observer**. It accepts final event callbacks from Laravel, validates required fields for `donation.completed` and `discount.approved`, then returns HTTP 202 or HTTP 400. Laravel runs inventory sync and all business actions; n8n does not apply donations or discounts. The workflow JSON files in this repository are older inactive snapshots, not the workflow deployed on the VPS.
+> **Automation status:** The VPS runs **EcoLoop Laravel Event Observer**. Laravel sends it completed donation and approved discount events. The workflow validates their event type, identifiers, timestamps, and relevant quantities or discount percentages, then returns HTTP 202 for valid events or HTTP 400 for invalid payloads.
 
 ## Intended SDGs contributions
 
@@ -155,7 +155,7 @@ composer run dev
 
 - **9Router:** Set `NINEROUTER_API_KEY`, `NINEROUTER_BASE_URL`, `NINEROUTER_MODEL`, and `NINEROUTER_VISION_MODEL`. The configured default base URL is `http://127.0.0.1:20128/v1`; make sure it is reachable from the Laravel process.
 - **Telegram:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, configure a public HTTPS webhook, and link accounts/partners through the application workflow.
-- **n8n:** Laravel sends finalized donation and discount events to the active VPS workflow through `N8N_EVENT_WEBHOOK_URL` (`POST /webhook/ecoloop-laravel-events`). The repository files `n8n-current-backup.json` and `ecoloop-agent-n8n.json` are inactive workflow snapshots, not the active event observer. Do not import them over the live workflow. To set up another n8n instance, export **EcoLoop Laravel Event Observer** from the VPS and set Laravel's callback URL for that instance.
+- **n8n:** Laravel sends finalized donation and discount events to **EcoLoop Laravel Event Observer** through `N8N_EVENT_WEBHOOK_URL` (`POST /webhook/ecoloop-laravel-events`). The workflow validates each event and returns an acknowledgement to Laravel.
 - **Queue and scheduler:** Configure a queue worker and Laravel scheduler in the deployment environment to run notifications and scheduled jobs.
 
 ## Project structure
@@ -165,11 +165,7 @@ app/                  Laravel backend, controllers, models, services, and jobs
 resources/js/         Vue pages and interface components
 resources/css/        Application styles and EcoLoop visual palette
 routes/                Web routes, API routes, and scheduler
-Live n8n workflow      EcoLoop Laravel Event Observer (deployed on VPS; not in these snapshots)
-n8n-current-backup.json
-                      older inactive n8n workflow snapshot
-ecoloop-agent-n8n.json
-                      inactive side-effect-disabled workflow draft
+Active n8n workflow   EcoLoop Laravel Event Observer (deployed on VPS)
 docs/assets/           Poster asset used in this README
 ```
 
