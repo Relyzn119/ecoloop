@@ -528,10 +528,9 @@ const formatCurrency = (value: number) => new Intl.NumberFormat('id-ID', { style
                         >
                             {{ auto_sync.auto_sync_enabled ? 'Auto Sync On' : 'Paused' }}
                         </span>
-                        <span class="rounded-full bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:text-sky-300">DEMO DATA</span>
                     </div>
                     <p class="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                        Auto Sync simulates central product receipts and POS sales every 5 minutes. Sync Now updates demo data immediately and asks the manager to approve urgent donations in Telegram; stock changes only after confirmation. Manual product entry remains available.
+                        The Auto Sync system simulates central product receipts and POS sales every 5 minutes. The Sync Now feature updates data instantly and sends urgent donation approval requests to managers via Telegram; stock updates automatically once confirmed. Manual product entry remains available.
                     </p>
                     <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                         Last sync: {{ auto_sync.last_synced_at ? new Date(auto_sync.last_synced_at).toLocaleString() : 'Not synced yet' }}

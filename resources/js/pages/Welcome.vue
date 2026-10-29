@@ -281,7 +281,6 @@ onBeforeUnmount(() => {
                                                     Food under control<span class="text-[#8E9C75]">.</span>
                                                 </h2>
                                             </div>
-                                            <span class="rounded-full border border-[#e8e4db] px-2.5 py-1.5 text-[8px]">Demo</span>
                                         </div>
                                         <div class="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
                                             <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-2.5"><p class="text-[8px] text-[#8d8a7e]">Expiring soon</p><p class="mt-1 font-serif text-[20px]">7</p><p class="text-[8px] text-[#bb7a54]">Critical window</p></div>
@@ -296,7 +295,6 @@ onBeforeUnmount(() => {
                                                         <p class="text-[9px] font-semibold">Urgent Clearance Items</p>
                                                         <p class="text-[8px] text-[#949084]">Products approaching expiration</p>
                                                     </div>
-                                                    <span class="rounded-full bg-[#f6e9df] px-2 py-1 text-[8px] text-[#a25e42]">Demo</span>
                                                 </div>
                                                 <div class="mt-3 flex flex-col gap-2.5">
                                                     <div
