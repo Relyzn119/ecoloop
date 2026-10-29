@@ -156,8 +156,6 @@ composer run dev
 - **n8n:** Review `n8n-current-backup.json` and `ecoloop-agent-n8n.json`. Import only the workflow you intend to use, configure URLs and credentials in your n8n instance, and test in a controlled environment. Avoid enabling schedules or actions that duplicate Laravel-owned processing.
 - **Queue and scheduler:** Configure a queue worker and Laravel scheduler in the deployment environment to run notifications and scheduled jobs.
 
-Never commit service tokens, secrets, or credentials to the repository.
-
 ## Project structure
 
 ```text
