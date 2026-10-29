@@ -31,7 +31,7 @@ EcoLoop is a web platform that helps retailers manage products and inventory bat
 
 <div align="center">
   <img src="docs/assets/ecoloop-poster.png" alt="EcoLoop poster: smart inventory management to reduce food waste" width="620">
-  <br><sub>EcoLoop visual identity: forest green, warm cream, sage, and gold accents.</sub>
+  <br><sub>EcoLoop poster</sub>
 </div>
 
 ## From inventory to action
