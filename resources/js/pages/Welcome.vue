@@ -1,787 +1,864 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-</script>
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import {
+    ArrowDownRight,
+    ArrowRight,
+    ArrowUpRight,
+    Bot,
+    Check,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    Handshake,
+    Leaf,
+    Menu,
+    Package,
+    ScanEye,
+    Sparkles,
+    Store,
+    Tag,
+    X,
+} from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
+const page = usePage();
+const isSignedIn = computed(() => Boolean((page.props as unknown as { auth?: { user?: unknown } }).auth?.user));
+const primaryHref = computed(() => (isSignedIn.value ? route('dashboard') : route('login')));
+const primaryLabel = computed(() => (isSignedIn.value ? 'Open dashboard' : 'Sign in to EcoLoop'));
+const carousel = ref<HTMLElement | null>(null);
+const proofSection = ref<HTMLElement | null>(null);
+const counts = ref([0, 0, 0]);
+const openFaq = ref(0);
+const mobileMenuOpen = ref(false);
+let revealObserver: IntersectionObserver | undefined;
+let counterObserver: IntersectionObserver | undefined;
+let parallaxFrame = 0;
+let counterFrame = 0;
+let counted = false;
+
+const features = [
+    {
+        eyebrow: '01 · VISIBILITY',
+        title: 'Know your stock before it is too late.',
+        description: 'Track products and batches by shelf life, quantity, and source in one actionable view.',
+        image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=85',
+        alt: 'Fresh produce at a market',
+        icon: Package,
+    },
+    {
+        eyebrow: '02 · VALUE RECOVERY',
+        title: 'Discount at the right moment.',
+        description: 'Markdown recommendations help products retain value for customers and reduce the chance of inventory becoming waste.',
+        image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=1200&q=85',
+        alt: 'Freshly baked bread',
+        icon: Tag,
+    },
+    {
+        eyebrow: '03 · TARGETED DONATIONS',
+        title: 'Connect surplus food with partners.',
+        description: 'Allocate safe-to-eat products, coordinate reviews, and keep donation handoffs transparent.',
+        image: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=1200&q=85',
+        alt: 'Fresh vegetable harvest',
+        icon: Handshake,
+    },
+];
+const faqs = [
+    {
+        question: 'What is EcoLoop?',
+        answer: 'EcoLoop helps retailers manage food inventory nearing its expiration date. It tracks shelf life, recommends discounts, and connects safe-to-eat products with donation partners.',
+    },
+    {
+        question: 'Does EcoLoop change prices automatically?',
+        answer: 'EcoLoop can recommend markdowns based on stock conditions and remaining shelf life. Your operations team can review and approve actions before any changes are applied.',
+    },
+    {
+        question: 'How do partners receive donations?',
+        answer: 'Products allocated for donation are routed through partner workflows. EcoLoop supports notifications and reviews so every handoff is clear and recorded.',
+    },
+    {
+        question: 'Can EcoLoop connect to store inventory?',
+        answer: 'EcoLoop syncs product, quantity, price, and expiration data with your store operations.',
+    },
+];
+const nodes = [
+    { label: 'POS', icon: Store, pos: 'node-top' },
+    { label: 'AI', icon: Bot, pos: 'node-right-top' },
+    { label: 'Vision', icon: ScanEye, pos: 'node-right-bottom' },
+    { label: 'Partners', icon: Handshake, pos: 'node-bottom' },
+    { label: 'Inventory', icon: Package, pos: 'node-left-bottom' },
+    { label: 'Discount', icon: Tag, pos: 'node-left-top' },
+];
+function scrollFeatures(direction: -1 | 1): void {
+    carousel.value?.scrollBy({ left: direction * 440, behavior: 'smooth' });
+}
+function animateCounters(): void {
+    if (counted) return;
+    counted = true;
+    const targets = [3, 2, 1];
+    const start = performance.now();
+    const tick = (now: number) => {
+        const progress = Math.min((now - start) / 1200, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        counts.value = targets.map((target) => Math.round(target * eased));
+        if (progress < 1) counterFrame = requestAnimationFrame(tick);
+        else counts.value = targets;
+    };
+    counterFrame = requestAnimationFrame(tick);
+}
+function splitHeadingWords(): void {
+    document.querySelectorAll<HTMLElement>('.w-anim').forEach((heading) => {
+        const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+        const nodes: Text[] = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+        let wordIndex = 0;
+        nodes.forEach((node) => {
+            const fragment = document.createDocumentFragment();
+            (node.textContent ?? '').split(/(\s+)/).forEach((part) => {
+                if (!part) return;
+                if (/^\s+$/.test(part)) {
+                    fragment.appendChild(document.createTextNode(part));
+                    return;
+                }
+                const word = document.createElement('span');
+                word.className = 'word-reveal';
+                word.textContent = part;
+                word.style.animationDelay = wordIndex * 55 + 'ms';
+                wordIndex += 1;
+                fragment.appendChild(word);
+            });
+            node.parentNode?.replaceChild(fragment, node);
+        });
+    });
+}
+function updateParallax(): void {
+    if (parallaxFrame) cancelAnimationFrame(parallaxFrame);
+    parallaxFrame = requestAnimationFrame(() =>
+        document.querySelectorAll<HTMLElement>('.parallax').forEach((element) => {
+            const rect = element.getBoundingClientRect();
+            element.style.transform = 'translate3d(0, ' + (rect.top - window.innerHeight / 2) * 0.06 + 'px, 0)';
+        }),
+    );
+}
+onMounted(() => {
+    splitHeadingWords();
+    revealObserver = new IntersectionObserver(
+        (entries, observer) =>
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-revealed');
+                    observer.unobserve(entry.target);
+                }
+            }),
+        { threshold: 0.12 },
+    );
+    document.querySelectorAll('.reveal').forEach((element) => revealObserver?.observe(element));
+    if (proofSection.value) {
+        counterObserver = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    animateCounters();
+                    counterObserver?.disconnect();
+                }
+            },
+            { threshold: 0.35 },
+        );
+        counterObserver.observe(proofSection.value);
+    }
+    window.addEventListener('scroll', updateParallax, { passive: true });
+    updateParallax();
+});
+onBeforeUnmount(() => {
+    revealObserver?.disconnect();
+    counterObserver?.disconnect();
+    window.removeEventListener('scroll', updateParallax);
+    cancelAnimationFrame(parallaxFrame);
+    cancelAnimationFrame(counterFrame);
+});
+</script>
 <template>
-    <Head title="Welcome">
-        <link rel="preconnect" href="https://rsms.me/" />
-        <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <Head title="EcoLoop — Save food, keep its value">
+        <meta
+            name="description"
+            content="Track shelf life, preserve product value with markdowns, and route safe-to-eat food through donation partners."
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" /><link
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossorigin="anonymous"
+        />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
     </Head>
-    <div class="flex min-h-screen flex-col items-center bg-[#FDFDFC] p-6 text-[#1b1b18] dark:bg-[#0a0a0a] lg:justify-center lg:p-8">
-        <header class="not-has-[nav]:hidden mb-6 w-full max-w-[335px] text-sm lg:max-w-4xl">
-            <nav class="flex items-center justify-end gap-4">
-                <Link
-                    v-if="$page.props.auth.user"
-                    :href="route('dashboard')"
-                    class="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                >
-                    Dashboard
-                </Link>
-                <template v-else>
-                    <Link
-                        :href="route('login')"
-                        class="inline-block rounded-sm border border-transparent px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#19140035] dark:text-[#EDEDEC] dark:hover:border-[#3E3E3A]"
-                    >
-                        Log in
-                    </Link>
-                    <Link
-                        :href="route('register')"
-                        class="inline-block rounded-sm border border-[#19140035] px-5 py-1.5 text-sm leading-normal text-[#1b1b18] hover:border-[#1915014a] dark:border-[#3E3E3A] dark:text-[#EDEDEC] dark:hover:border-[#62605b]"
-                    >
-                        Register
-                    </Link>
-                </template>
-            </nav>
-        </header>
-        <div class="duration-750 starting:opacity-0 flex w-full items-center justify-center opacity-100 transition-opacity lg:grow">
-            <main class="flex w-full max-w-[335px] flex-col-reverse overflow-hidden rounded-lg lg:max-w-4xl lg:flex-row">
-                <div
-                    class="flex-1 rounded-bl-lg rounded-br-lg bg-white p-6 pb-12 text-[13px] leading-[20px] shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] dark:bg-[#161615] dark:text-[#EDEDEC] dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d] lg:rounded-br-none lg:rounded-tl-lg lg:p-20"
-                >
-                    <h1 class="mb-1 font-medium">Let's get started</h1>
-                    <p class="mb-2 text-[#706f6c] dark:text-[#A1A09A]">
-                        Laravel has an incredibly rich ecosystem. <br />We suggest starting with the following.
-                    </p>
-                    <ul class="mb-4 flex flex-col lg:mb-6">
-                        <li
-                            class="relative flex items-center gap-4 py-2 before:absolute before:bottom-0 before:left-[0.4rem] before:top-1/2 before:border-l before:border-[#e3e3e0] dark:before:border-[#3E3E3A]"
+    <div class="ecoloop min-h-screen overflow-hidden bg-[#F2EEE5] text-[#171512] antialiased">
+        <header class="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-8 lg:px-12">
+            <div class="mx-auto flex max-w-[1440px] items-center justify-between gap-2 rounded-full border border-white/65 bg-[#F2EEE5]/85 px-3 py-2.5 shadow-lg backdrop-blur-2xl sm:px-7 sm:py-3">
+                <a href="#home" class="inline-flex items-center" aria-label="EcoLoop — back to home"><img src="/images/ecoloop-logo-light.png" alt="EcoLoop" class="h-7 w-auto max-w-[92px] sm:h-9 sm:max-w-[150px]" /></a>
+                <nav class="hidden items-center gap-8 text-[12px] font-medium text-[#6d6a5f] lg:flex" aria-label="Main navigation">
+                    <a href="#solusi">Solutions</a><a href="#alur">How it works</a><a href="#dampak">Impact</a><a href="#integrasi">Integrations</a><a href="#faq">FAQ</a>
+                </nav>
+                <div class="flex items-center gap-2"><Link :href="primaryHref" class="btn-lift inline-flex items-center gap-2 rounded-full bg-[#171512] px-3 py-2.5 text-[10px] font-semibold text-[#F2EEE5] sm:px-5 sm:text-[12px]"><span class="hidden sm:inline">{{ primaryLabel }}</span><span class="sm:hidden">{{ isSignedIn ? 'Dashboard' : 'Sign in' }}</span> <ArrowUpRight class="size-3.5" /></Link><button type="button" class="grid size-10 place-items-center rounded-full border border-[#d8d2c5] text-[#3B4B34] transition active:scale-95 lg:hidden" :aria-expanded="mobileMenuOpen" aria-controls="mobile-site-menu" aria-label="Open navigation" @click="mobileMenuOpen = !mobileMenuOpen"><X v-if="mobileMenuOpen" class="size-4" /><Menu v-else class="size-4" /></button></div>
+            </div>
+            <nav v-if="mobileMenuOpen" id="mobile-site-menu" class="mx-auto mt-2 grid max-w-[1440px] gap-1 rounded-3xl border border-white/70 bg-[#F2EEE5]/95 p-3 text-sm text-[#3b4b34] shadow-xl backdrop-blur-2xl lg:hidden">
+                <a v-for="item in [{ label: 'Solutions', href: '#solusi' }, { label: 'How it works', href: '#alur' }, { label: 'Impact', href: '#dampak' }, { label: 'Integrations', href: '#integrasi' }, { label: 'FAQ', href: '#faq' }]" :key="item.href" :href="item.href" class="rounded-xl px-4 py-3 transition hover:bg-[#e7ebde] active:scale-[.99]" @click="mobileMenuOpen = false">{{ item.label }}</a>
+            </nav>        </header>
+        <main id="home">
+            <section class="hero relative isolate flex min-h-[760px] items-center px-5 pb-20 pt-36 sm:px-8 lg:min-h-[900px] lg:px-12 lg:pt-40">
+                <div class="hero-photo parallax absolute inset-0 -z-20" role="img" aria-label="Fresh vegetable harvest" />
+                <div class="hero-shade absolute inset-0 -z-10" />
+                <div class="hero-glow absolute -left-36 top-32 -z-10 size-[460px] rounded-full" />
+                <div class="mx-auto grid w-full max-w-[1320px] items-center gap-14 lg:grid-cols-[.88fr_1.12fr] lg:gap-8">
+                    <div class="relative z-10 max-w-[610px] text-white">
+                        <div
+                            class="reveal mb-7 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-[10px] font-semibold uppercase tracking-[.16em] backdrop-blur-xl"
                         >
-                            <span class="relative bg-white py-1 dark:bg-[#161615]">
-                                <span
-                                    class="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#e3e3e0] bg-[#FDFDFC] shadow-[0px_0px_1px_0px_rgba(0,0,0,0.03),0px_1px_2px_0px_rgba(0,0,0,0.06)] dark:border-[#3E3E3A] dark:bg-[#161615]"
-                                >
-                                    <span class="h-1.5 w-1.5 rounded-full bg-[#dbdbd7] dark:bg-[#3E3E3A]" />
-                                </span>
-                            </span>
-                            <span>
-                                Read the
-                                <a
-                                    href="https://laravel.com/docs"
-                                    target="_blank"
-                                    class="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
-                                >
-                                    <span>Documentation</span>
-                                    <svg
-                                        width="{10}"
-                                        height="{11}"
-                                        viewBox="0 0 10 11"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        class="h-2.5 w-2.5"
-                                    >
-                                        <path d="M7.70833 6.95834V2.79167H3.54167M2.5 8L7.5 3.00001" stroke="currentColor" stroke-linecap="square" />
-                                    </svg>
-                                </a>
-                            </span>
-                        </li>
-                        <li
-                            class="relative flex items-center gap-4 py-2 before:absolute before:bottom-1/2 before:left-[0.4rem] before:top-0 before:border-l before:border-[#e3e3e0] dark:before:border-[#3E3E3A]"
+                            <span class="size-2 rounded-full bg-[#b4c29a]"></span>A circular system for retail food
+                        </div>
+                        <h1 class="w-anim reveal font-serif text-[clamp(3.6rem,8vw,7.3rem)] leading-[.9] tracking-[-.055em] text-[#F7F4ED]">
+                            <span class="block">Save</span><span class="block">food<span class="text-[#bdcaa6]">.</span></span
+                            ><span class="block italic text-[#d8dfc8]">Keep its value.</span>
+                        </h1>
+                        <p class="reveal mt-7 max-w-[450px] text-[14px] leading-7 text-white/75 sm:text-[15px]">
+                            EcoLoop helps retailers spot risk early, make informed decisions, and redirect food that still has value
+                            to the people who need it.
+                        </p>
+                        <div class="reveal mt-8 flex flex-wrap gap-3">
+                            <Link
+                                :href="primaryHref"
+                                class="btn-lift inline-flex items-center gap-3 rounded-full bg-[#F2EEE5] px-6 py-3.5 text-[12px] font-semibold text-[#171512]"
+                                >{{ primaryLabel }} <ArrowRight class="size-4" /></Link
+                            ><a
+                                href="#solusi"
+                                class="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/5 px-5 py-3.5 text-[12px] backdrop-blur-lg"
+                                >Explore how it works <ArrowDownRight class="size-4"
+                            /></a>
+                        </div>
+                        <div class="reveal mt-12 flex flex-wrap gap-5 text-[10px] text-white/65">
+                            <span class="inline-flex items-center gap-2"><Check class="size-3.5 text-[#bdcaa6]" /> Recommendations stay reviewable</span
+                            ><span class="inline-flex items-center gap-2"><Check class="size-3.5 text-[#bdcaa6]" /> Every step is recorded</span>
+                        </div>
+                    </div>
+                    <div class="reveal relative mx-auto w-full max-w-[710px] lg:ml-auto">
+                        <div class="absolute -right-5 -top-8 size-32 rounded-full bg-[#c68c62]/35 blur-3xl"></div>
+                        <div class="absolute -bottom-8 -left-8 size-40 rounded-full bg-[#8e9c75]/40 blur-3xl"></div>
+                        <div
+                            class="grad-border relative overflow-hidden rounded-[30px] bg-[#f8f5ed]/90 p-2.5 shadow-[0_35px_100px_rgba(20,30,20,.34)] backdrop-blur-[24px] sm:p-3.5"
                         >
-                            <span class="relative bg-white py-1 dark:bg-[#161615]">
-                                <span
-                                    class="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-[#e3e3e0] bg-[#FDFDFC] shadow-[0px_0px_1px_0px_rgba(0,0,0,0.03),0px_1px_2px_0px_rgba(0,0,0,0.06)] dark:border-[#3E3E3A] dark:bg-[#161615]"
-                                >
-                                    <span class="h-1.5 w-1.5 rounded-full bg-[#dbdbd7] dark:bg-[#3E3E3A]" />
-                                </span>
-                            </span>
-                            <span>
-                                Watch video tutorials at
-                                <a
-                                    href="https://laracasts.com"
-                                    target="_blank"
-                                    class="ml-1 inline-flex items-center space-x-1 font-medium text-[#f53003] underline underline-offset-4 dark:text-[#FF4433]"
-                                >
-                                    <span>Laracasts</span>
-                                    <svg
-                                        width="{10}"
-                                        height="{11}"
-                                        viewBox="0 0 10 11"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        class="h-2.5 w-2.5"
-                                    >
-                                        <path d="M7.70833 6.95834V2.79167H3.54167M2.5 8L7.5 3.00001" stroke="currentColor" stroke-linecap="square" />
-                                    </svg>
-                                </a>
-                            </span>
-                        </li>
-                    </ul>
-                    <ul class="flex gap-3 text-sm leading-normal">
-                        <li>
-                            <a
-                                href="https://cloud.laravel.com"
-                                target="_blank"
-                                class="inline-block rounded-sm border border-black bg-[#1b1b18] px-5 py-1.5 text-sm leading-normal text-white hover:border-black hover:bg-black dark:border-[#eeeeec] dark:bg-[#eeeeec] dark:text-[#1C1C1A] dark:hover:border-white dark:hover:bg-white"
-                            >
-                                Deploy now
-                            </a>
-                        </li>
-                    </ul>
+                            <div class="overflow-hidden rounded-[24px] bg-[#fbfaf6] text-[#171512]">
+                                <div class="flex items-center justify-between border-b border-[#e9e5dc] px-4 py-3 sm:px-6 sm:py-4">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="grid size-8 place-items-center rounded-xl bg-[#3B4B34] text-white"><Leaf class="size-4" /></div>
+                                        <div>
+                                            <p class="text-[11px] font-semibold">EcoLoop Control</p>
+                                            <p class="text-[9px] text-[#8a877d]">Concept preview</p>
+                                        </div>
+                                    </div>
+                                    <span class="rounded-full bg-[#edf1e7] px-2.5 py-1 text-[9px] text-[#3B4B34]">● System connected</span>
+                                </div>
+                                <div class="grid min-h-[370px] sm:grid-cols-[140px_1fr]">
+                                    <aside class="hidden border-r border-[#e9e5dc] bg-[#f6f3eb] p-4 sm:flex sm:flex-col">
+                                        <p class="mb-3 px-2 text-[8px] font-semibold uppercase tracking-[.15em] text-[#a29e93]">Workspace</p>
+                                        <div class="flex flex-col gap-1 text-[10px]">
+                                            <div class="flex items-center gap-2 rounded-xl bg-[#e7ebde] px-2.5 py-2.5 text-[#3B4B34]">
+                                                <Package class="size-3.5" /> Dashboard
+                                            </div>
+                                            <div class="flex items-center gap-2 px-2.5 py-2.5 text-[#817e74]">
+                                                <Bot class="size-3.5" /> Inventory
+                                            </div>
+                                            <div class="flex items-center gap-2 px-2.5 py-2.5 text-[#817e74]">
+                                                <Handshake class="size-3.5" /> AI Simulation
+                                            </div>
+                                        </div>
+                                    </aside>
+                                    <div class="min-w-0 p-4 sm:p-5">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-[8px] font-semibold uppercase tracking-[.15em] text-[#929084]">
+                                                    Operational overview
+                                                </p>
+                                                <h2 class="mt-1 font-serif text-[25px] sm:text-[30px]">
+                                                    Food under control<span class="text-[#8E9C75]">.</span>
+                                                </h2>
+                                            </div>
+                                        </div>
+                                        <div class="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-2.5"><p class="text-[8px] text-[#8d8a7e]">Expiring soon</p><p class="mt-1 font-serif text-[20px]">7</p><p class="text-[8px] text-[#bb7a54]">Critical window</p></div>
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-2.5"><p class="text-[8px] text-[#8d8a7e]">Food waste diverted</p><p class="mt-1 font-serif text-[20px]">88 <span class="text-[10px]">kg</span></p><p class="text-[8px] text-[#71845f]">Rescued food</p></div>
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-2.5"><p class="text-[8px] text-[#8d8a7e]">Loss prevented</p><p class="mt-1 font-serif text-[18px]">Rp 5.7jt</p><p class="text-[8px] text-[#71845f]">Markdown & rescue</p></div>
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-2.5"><p class="text-[8px] text-[#8d8a7e]">CO₂e reduced</p><p class="mt-1 font-serif text-[20px]">220 <span class="text-[10px]">kg</span></p><p class="text-[8px] text-[#71845f]">Impact tracked</p></div>
+                                        </div>
+                                        <div class="mt-3 grid gap-3 lg:grid-cols-[1.2fr_.8fr]">
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-3.5">
+                                                <div class="flex justify-between">
+                                                    <div>
+                                                        <p class="text-[9px] font-semibold">Urgent Clearance Items</p>
+                                                        <p class="text-[8px] text-[#949084]">Products approaching expiration</p>
+                                                    </div>
+                                                </div>
+                                                <div class="mt-3 flex flex-col gap-2.5">
+                                                    <div
+                                                        v-for="item in [
+                                                            {
+                                                                emoji: '🥑',
+                                                                name: 'Local avocados',
+                                                                status: 'Review',
+                                                                color: 'bg-[#bb7a54]',
+                                                                width: '72%',
+                                                            },
+                                                            {
+                                                                emoji: '🥬',
+                                                                name: 'Leafy greens',
+                                                                status: 'Monitor',
+                                                                color: 'bg-[#8e9c75]',
+                                                                width: '40%',
+                                                            },
+                                                            {
+                                                                emoji: '🥖',
+                                                                name: 'Whole-grain bread',
+                                                                status: 'Discount',
+                                                                color: 'bg-[#d2a16e]',
+                                                                width: '55%',
+                                                            },
+                                                        ]"
+                                                        :key="item.name"
+                                                        class="flex items-center gap-2.5"
+                                                    >
+                                                        <div class="grid size-8 place-items-center rounded-xl bg-[#f4ead8] text-[15px]">
+                                                            {{ item.emoji }}
+                                                        </div>
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="flex justify-between text-[9px]">
+                                                                <span class="font-semibold">{{ item.name }}</span
+                                                                ><span class="text-[#a25e42]">{{ item.status }}</span>
+                                                            </div>
+                                                            <div class="mt-1.5 h-1 rounded-full bg-[#eeeae0]">
+                                                                <div
+                                                                    class="h-full rounded-full"
+                                                                    :class="item.color"
+                                                                    :style="{ width: item.width }"
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="rounded-2xl border border-[#ebe7de] bg-white/75 p-3.5">
+                                                <div class="mb-3 flex items-center justify-between"><span class="text-[9px] font-semibold">Agent Activity Feed</span><span class="size-2 rounded-full bg-[#7a9c6b]"></span></div>
+                                                <div class="space-y-2">
+                                                    <div class="rounded-xl border border-[#ebe7de] bg-[#faf8f2] p-2"><p class="text-[8px] font-semibold text-[#8b6949]">Alert sent · Organic Whole Milk</p><p class="mt-1 text-[7px] text-[#858277]">19 items monitored · markdown active</p></div>
+                                                    <div class="rounded-xl border border-[#ebe7de] bg-[#faf8f2] p-2"><p class="text-[8px] font-semibold text-[#596d48]">Donation requested · Sourdough</p><p class="mt-1 text-[7px] text-[#858277]">Dispatched to community partner</p></div>
+                                                    <div class="rounded-xl border border-[#ebe7de] bg-[#faf8f2] p-2"><p class="text-[8px] font-semibold text-[#8b6949]">Review needed · Baby Spinach</p><p class="mt-1 text-[7px] text-[#858277]">Shelf life remaining: 48 hours</p></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 flex items-center gap-2 rounded-xl border border-[#eae6dd] bg-white/65 px-3 py-2.5">
+                                            <Check class="size-3 text-[#3B4B34]" />
+                                            <p class="text-[8px] text-[#77746b]">Every action is reviewable and recorded.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div
-                    class="relative -mb-px aspect-[335/376] w-full shrink-0 overflow-hidden rounded-t-lg bg-[#fff2f2] dark:bg-[#1D0002] lg:-ml-px lg:mb-0 lg:aspect-auto lg:w-[438px] lg:rounded-r-lg lg:rounded-t-none"
-                >
-                    <svg
-                        class="duration-750 starting:translate-y-6 starting:opacity-0 w-full max-w-none translate-y-0 text-[#F53003] opacity-100 transition-all dark:text-[#F61500]"
-                        viewBox="0 0 438 104"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <path d="M17.2036 -3H0V102.197H49.5189V86.7187H17.2036V-3Z" fill="currentColor" />
-                        <path
-                            d="M110.256 41.6337C108.061 38.1275 104.945 35.3731 100.905 33.3681C96.8667 31.3647 92.8016 30.3618 88.7131 30.3618C83.4247 30.3618 78.5885 31.3389 74.201 33.2923C69.8111 35.2456 66.0474 37.928 62.9059 41.3333C59.7643 44.7401 57.3198 48.6726 55.5754 53.1293C53.8287 57.589 52.9572 62.274 52.9572 67.1813C52.9572 72.1925 53.8287 76.8995 55.5754 81.3069C57.3191 85.7173 59.7636 89.6241 62.9059 93.0293C66.0474 96.4361 69.8119 99.1155 74.201 101.069C78.5885 103.022 83.4247 103.999 88.7131 103.999C92.8016 103.999 96.8667 102.997 100.905 100.994C104.945 98.9911 108.061 96.2359 110.256 92.7282V102.195H126.563V32.1642H110.256V41.6337ZM108.76 75.7472C107.762 78.4531 106.366 80.8078 104.572 82.8112C102.776 84.8161 100.606 86.4183 98.0637 87.6206C95.5202 88.823 92.7004 89.4238 89.6103 89.4238C86.5178 89.4238 83.7252 88.823 81.2324 87.6206C78.7388 86.4183 76.5949 84.8161 74.7998 82.8112C73.004 80.8078 71.6319 78.4531 70.6856 75.7472C69.7356 73.0421 69.2644 70.1868 69.2644 67.1821C69.2644 64.1758 69.7356 61.3205 70.6856 58.6154C71.6319 55.9102 73.004 53.5571 74.7998 51.5522C76.5949 49.5495 78.738 47.9451 81.2324 46.7427C83.7252 45.5404 86.5178 44.9396 89.6103 44.9396C92.7012 44.9396 95.5202 45.5404 98.0637 46.7427C100.606 47.9451 102.776 49.5487 104.572 51.5522C106.367 53.5571 107.762 55.9102 108.76 58.6154C109.756 61.3205 110.256 64.1758 110.256 67.1821C110.256 70.1868 109.756 73.0421 108.76 75.7472Z"
-                            fill="currentColor"
-                        />
-                        <path
-                            d="M242.805 41.6337C240.611 38.1275 237.494 35.3731 233.455 33.3681C229.416 31.3647 225.351 30.3618 221.262 30.3618C215.974 30.3618 211.138 31.3389 206.75 33.2923C202.36 35.2456 198.597 37.928 195.455 41.3333C192.314 44.7401 189.869 48.6726 188.125 53.1293C186.378 57.589 185.507 62.274 185.507 67.1813C185.507 72.1925 186.378 76.8995 188.125 81.3069C189.868 85.7173 192.313 89.6241 195.455 93.0293C198.597 96.4361 202.361 99.1155 206.75 101.069C211.138 103.022 215.974 103.999 221.262 103.999C225.351 103.999 229.416 102.997 233.455 100.994C237.494 98.9911 240.611 96.2359 242.805 92.7282V102.195H259.112V32.1642H242.805V41.6337ZM241.31 75.7472C240.312 78.4531 238.916 80.8078 237.122 82.8112C235.326 84.8161 233.156 86.4183 230.614 87.6206C228.07 88.823 225.251 89.4238 222.16 89.4238C219.068 89.4238 216.275 88.823 213.782 87.6206C211.289 86.4183 209.145 84.8161 207.35 82.8112C205.554 80.8078 204.182 78.4531 203.236 75.7472C202.286 73.0421 201.814 70.1868 201.814 67.1821C201.814 64.1758 202.286 61.3205 203.236 58.6154C204.182 55.9102 205.554 53.5571 207.35 51.5522C209.145 49.5495 211.288 47.9451 213.782 46.7427C216.275 45.5404 219.068 44.9396 222.16 44.9396C225.251 44.9396 228.07 45.5404 230.614 46.7427C233.156 47.9451 235.326 49.5487 237.122 51.5522C238.917 53.5571 240.312 55.9102 241.31 58.6154C242.306 61.3205 242.806 64.1758 242.806 67.1821C242.805 70.1868 242.305 73.0421 241.31 75.7472Z"
-                            fill="currentColor"
-                        />
-                        <path d="M438 -3H421.694V102.197H438V-3Z" fill="currentColor" />
-                        <path d="M139.43 102.197H155.735V48.2834H183.712V32.1665H139.43V102.197Z" fill="currentColor" />
-                        <path
-                            d="M324.49 32.1665L303.995 85.794L283.498 32.1665H266.983L293.748 102.197H314.242L341.006 32.1665H324.49Z"
-                            fill="currentColor"
-                        />
-                        <path
-                            d="M376.571 30.3656C356.603 30.3656 340.797 46.8497 340.797 67.1828C340.797 89.6597 356.094 104 378.661 104C391.29 104 399.354 99.1488 409.206 88.5848L398.189 80.0226C398.183 80.031 389.874 90.9895 377.468 90.9895C363.048 90.9895 356.977 79.3111 356.977 73.269H411.075C413.917 50.1328 398.775 30.3656 376.571 30.3656ZM357.02 61.0967C357.145 59.7487 359.023 43.3761 376.442 43.3761C393.861 43.3761 395.978 59.7464 396.099 61.0967H357.02Z"
-                            fill="currentColor"
-                        />
-                    </svg>
-                    <svg
-                        class="relative -ml-8 -mt-[4.9rem] w-[448px] max-w-none dark:hidden lg:-mt-[6.6rem] lg:ml-0"
-                        viewBox="0 0 440 376"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <g class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300">
-                            <path
-                                d="M188.263 355.73L188.595 355.73C195.441 348.845 205.766 339.761 219.569 328.477C232.93 317.193 242.978 308.205 249.714 301.511C256.34 294.626 260.867 287.358 263.296 279.708C265.725 272.058 264.565 264.121 259.816 255.896C254.516 246.716 247.062 239.352 237.454 233.805C227.957 228.067 217.908 225.198 207.307 225.198C196.927 225.197 190.136 227.97 186.934 233.516C183.621 238.872 184.726 246.331 190.247 255.894L125.647 255.891C116.371 239.825 112.395 225.481 113.72 212.858C115.265 200.235 121.559 190.481 132.602 183.596C143.754 176.52 158.607 172.982 177.159 172.983C196.594 172.984 215.863 176.523 234.968 183.6C253.961 190.486 271.299 200.241 286.98 212.864C302.661 225.488 315.14 239.833 324.416 255.899C333.03 270.817 336.841 283.918 335.847 295.203C335.075 306.487 331.376 316.336 324.75 324.751C318.346 333.167 308.408 343.494 294.936 355.734L377.094 355.737L405.917 405.656L217.087 405.649L188.263 355.73Z"
-                                fill="black"
-                            />
-                            <path
-                                d="M9.11884 226.339L-13.7396 226.338L-42.7286 176.132L43.0733 176.135L175.595 405.649L112.651 405.647L9.11884 226.339Z"
-                                fill="black"
-                            />
-                            <path
-                                d="M188.263 355.73L188.595 355.73C195.441 348.845 205.766 339.761 219.569 328.477C232.93 317.193 242.978 308.205 249.714 301.511C256.34 294.626 260.867 287.358 263.296 279.708C265.725 272.058 264.565 264.121 259.816 255.896C254.516 246.716 247.062 239.352 237.454 233.805C227.957 228.067 217.908 225.198 207.307 225.198C196.927 225.197 190.136 227.97 186.934 233.516C183.621 238.872 184.726 246.331 190.247 255.894L125.647 255.891C116.371 239.825 112.395 225.481 113.72 212.858C115.265 200.235 121.559 190.481 132.602 183.596C143.754 176.52 158.607 172.982 177.159 172.983C196.594 172.984 215.863 176.523 234.968 183.6C253.961 190.486 271.299 200.241 286.98 212.864C302.661 225.488 315.14 239.833 324.416 255.899C333.03 270.817 336.841 283.918 335.847 295.203C335.075 306.487 331.376 316.336 324.75 324.751C318.346 333.167 308.408 343.494 294.936 355.734L377.094 355.737L405.917 405.656L217.087 405.649L188.263 355.73Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M9.11884 226.339L-13.7396 226.338L-42.7286 176.132L43.0733 176.135L175.595 405.649L112.651 405.647L9.11884 226.339Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M204.592 327.449L204.923 327.449C211.769 320.564 222.094 311.479 235.897 300.196C249.258 288.912 259.306 279.923 266.042 273.23C272.668 266.345 277.195 259.077 279.624 251.427C282.053 243.777 280.893 235.839 276.145 227.615C270.844 218.435 263.39 211.071 253.782 205.524C244.285 199.786 234.236 196.917 223.635 196.916C213.255 196.916 206.464 199.689 203.262 205.235C199.949 210.59 201.054 218.049 206.575 227.612L141.975 227.61C132.699 211.544 128.723 197.2 130.048 184.577C131.593 171.954 137.887 162.2 148.93 155.315C160.083 148.239 174.935 144.701 193.487 144.702C212.922 144.703 232.192 148.242 251.296 155.319C270.289 162.205 287.627 171.96 303.308 184.583C318.989 197.207 331.468 211.552 340.745 227.618C349.358 242.536 353.169 255.637 352.175 266.921C351.403 278.205 347.704 288.055 341.078 296.47C334.674 304.885 324.736 315.213 311.264 327.453L393.422 327.456L422.246 377.375L233.415 377.368L204.592 327.449Z"
-                                fill="#F8B803"
-                            />
-                            <path
-                                d="M25.447 198.058L2.58852 198.057L-26.4005 147.851L59.4015 147.854L191.923 377.368L128.979 377.365L25.447 198.058Z"
-                                fill="#F8B803"
-                            />
-                            <path
-                                d="M204.592 327.449L204.923 327.449C211.769 320.564 222.094 311.479 235.897 300.196C249.258 288.912 259.306 279.923 266.042 273.23C272.668 266.345 277.195 259.077 279.624 251.427C282.053 243.777 280.893 235.839 276.145 227.615C270.844 218.435 263.39 211.071 253.782 205.524C244.285 199.786 234.236 196.917 223.635 196.916C213.255 196.916 206.464 199.689 203.262 205.235C199.949 210.59 201.054 218.049 206.575 227.612L141.975 227.61C132.699 211.544 128.723 197.2 130.048 184.577C131.593 171.954 137.887 162.2 148.93 155.315C160.083 148.239 174.935 144.701 193.487 144.702C212.922 144.703 232.192 148.242 251.296 155.319C270.289 162.205 287.627 171.96 303.308 184.583C318.989 197.207 331.468 211.552 340.745 227.618C349.358 242.536 353.169 255.637 352.175 266.921C351.403 278.205 347.704 288.055 341.078 296.47C334.674 304.885 324.736 315.213 311.264 327.453L393.422 327.456L422.246 377.375L233.415 377.368L204.592 327.449Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M25.447 198.058L2.58852 198.057L-26.4005 147.851L59.4015 147.854L191.923 377.368L128.979 377.365L25.447 198.058Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g
-                            :style="{ mixBlendMode: 'hard-light' }"
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                        >
-                            <path
-                                d="M217.342 305.363L217.673 305.363C224.519 298.478 234.844 289.393 248.647 278.11C262.008 266.826 272.056 257.837 278.792 251.144C285.418 244.259 289.945 236.991 292.374 229.341C294.803 221.691 293.643 213.753 288.895 205.529C283.594 196.349 276.14 188.985 266.532 183.438C257.035 177.7 246.986 174.831 236.385 174.83C226.005 174.83 219.214 177.603 216.012 183.149C212.699 188.504 213.804 195.963 219.325 205.527L154.725 205.524C145.449 189.458 141.473 175.114 142.798 162.491C144.343 149.868 150.637 140.114 161.68 133.229C172.833 126.153 187.685 122.615 206.237 122.616C225.672 122.617 244.942 126.156 264.046 133.233C283.039 140.119 300.377 149.874 316.058 162.497C331.739 175.121 344.218 189.466 353.495 205.532C362.108 220.45 365.919 233.551 364.925 244.835C364.153 256.12 360.454 265.969 353.828 274.384C347.424 282.799 337.486 293.127 324.014 305.367L406.172 305.37L434.996 355.289L246.165 355.282L217.342 305.363Z"
-                                fill="#F0ACB8"
-                            />
-                            <path
-                                d="M38.197 175.972L15.3385 175.971L-13.6505 125.765L72.1515 125.768L204.673 355.282L141.729 355.279L38.197 175.972Z"
-                                fill="#F0ACB8"
-                            />
-                            <path
-                                d="M217.342 305.363L217.673 305.363C224.519 298.478 234.844 289.393 248.647 278.11C262.008 266.826 272.056 257.837 278.792 251.144C285.418 244.259 289.945 236.991 292.374 229.341C294.803 221.691 293.643 213.753 288.895 205.529C283.594 196.349 276.14 188.985 266.532 183.438C257.035 177.7 246.986 174.831 236.385 174.83C226.005 174.83 219.214 177.603 216.012 183.149C212.699 188.504 213.804 195.963 219.325 205.527L154.725 205.524C145.449 189.458 141.473 175.114 142.798 162.491C144.343 149.868 150.637 140.114 161.68 133.229C172.833 126.153 187.685 122.615 206.237 122.616C225.672 122.617 244.942 126.156 264.046 133.233C283.039 140.119 300.377 149.874 316.058 162.497C331.739 175.121 344.218 189.466 353.495 205.532C362.108 220.45 365.919 233.551 364.925 244.835C364.153 256.12 360.454 265.969 353.828 274.384C347.424 282.799 337.486 293.127 324.014 305.367L406.172 305.37L434.996 355.289L246.165 355.282L217.342 305.363Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M38.197 175.972L15.3385 175.971L-13.6505 125.765L72.1515 125.768L204.673 355.282L141.729 355.279L38.197 175.972Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g
-                            :style="{ mixBlendMode: 'plus-darker' }"
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                        >
-                            <path
-                                d="M230.951 281.792L231.282 281.793C238.128 274.907 248.453 265.823 262.256 254.539C275.617 243.256 285.666 234.267 292.402 227.573C299.027 220.688 303.554 213.421 305.983 205.771C308.412 198.12 307.253 190.183 302.504 181.959C297.203 172.778 289.749 165.415 280.142 159.868C270.645 154.13 260.596 151.26 249.995 151.26C239.615 151.26 232.823 154.033 229.621 159.579C226.309 164.934 227.413 172.393 232.935 181.956L168.335 181.954C159.058 165.888 155.082 151.543 156.407 138.92C157.953 126.298 164.247 116.544 175.289 109.659C186.442 102.583 201.294 99.045 219.846 99.0457C239.281 99.0464 258.551 102.585 277.655 109.663C296.649 116.549 313.986 126.303 329.667 138.927C345.349 151.551 357.827 165.895 367.104 181.961C375.718 196.88 379.528 209.981 378.535 221.265C377.762 232.549 374.063 242.399 367.438 250.814C361.033 259.229 351.095 269.557 337.624 281.796L419.782 281.8L448.605 331.719L259.774 331.712L230.951 281.792Z"
-                                fill="#F3BEC7"
-                            />
-                            <path
-                                d="M51.8063 152.402L28.9479 152.401L-0.0411453 102.195L85.7608 102.198L218.282 331.711L155.339 331.709L51.8063 152.402Z"
-                                fill="#F3BEC7"
-                            />
-                            <path
-                                d="M230.951 281.792L231.282 281.793C238.128 274.907 248.453 265.823 262.256 254.539C275.617 243.256 285.666 234.267 292.402 227.573C299.027 220.688 303.554 213.421 305.983 205.771C308.412 198.12 307.253 190.183 302.504 181.959C297.203 172.778 289.749 165.415 280.142 159.868C270.645 154.13 260.596 151.26 249.995 151.26C239.615 151.26 232.823 154.033 229.621 159.579C226.309 164.934 227.413 172.393 232.935 181.956L168.335 181.954C159.058 165.888 155.082 151.543 156.407 138.92C157.953 126.298 164.247 116.544 175.289 109.659C186.442 102.583 201.294 99.045 219.846 99.0457C239.281 99.0464 258.551 102.585 277.655 109.663C296.649 116.549 313.986 126.303 329.667 138.927C345.349 151.551 357.827 165.895 367.104 181.961C375.718 196.88 379.528 209.981 378.535 221.265C377.762 232.549 374.063 242.399 367.438 250.814C361.033 259.229 351.095 269.557 337.624 281.796L419.782 281.8L448.605 331.719L259.774 331.712L230.951 281.792Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M51.8063 152.402L28.9479 152.401L-0.0411453 102.195L85.7608 102.198L218.282 331.711L155.339 331.709L51.8063 152.402Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300">
-                            <path
-                                d="M188.467 355.363L188.798 355.363C195.644 348.478 205.969 339.393 219.772 328.11C233.133 316.826 243.181 307.837 249.917 301.144C253.696 297.217 256.792 293.166 259.205 288.991C261.024 285.845 262.455 282.628 263.499 279.341C265.928 271.691 264.768 263.753 260.02 255.529C254.719 246.349 247.265 238.985 237.657 233.438C228.16 227.7 218.111 224.831 207.51 224.83C197.13 224.83 190.339 227.603 187.137 233.149C183.824 238.504 184.929 245.963 190.45 255.527L125.851 255.524C116.574 239.458 112.598 225.114 113.923 212.491C114.615 206.836 116.261 201.756 118.859 197.253C122.061 191.704 126.709 187.03 132.805 183.229C143.958 176.153 158.81 172.615 177.362 172.616C196.797 172.617 216.067 176.156 235.171 183.233C254.164 190.119 271.502 199.874 287.183 212.497C302.864 225.121 315.343 239.466 324.62 255.532C333.233 270.45 337.044 283.551 336.05 294.835C335.46 303.459 333.16 311.245 329.151 318.194C327.915 320.337 326.515 322.4 324.953 324.384C318.549 332.799 308.611 343.127 295.139 355.367L377.297 355.37L406.121 405.289L217.29 405.282L188.467 355.363Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M9.32197 225.972L-13.5365 225.971L-42.5255 175.765L43.2765 175.768L175.798 405.282L112.854 405.279L9.32197 225.972Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M345.247 111.915C329.566 99.2919 312.229 89.5371 293.235 82.6512L235.167 183.228C254.161 190.114 271.498 199.869 287.179 212.492L345.247 111.915Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M382.686 154.964C373.41 138.898 360.931 124.553 345.25 111.93L287.182 212.506C302.863 225.13 315.342 239.475 324.618 255.541L382.686 154.964Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M293.243 82.6472C274.139 75.57 254.869 72.031 235.434 72.0303L177.366 172.607C196.801 172.608 216.071 176.147 235.175 183.224L293.243 82.6472Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M394.118 194.257C395.112 182.973 391.301 169.872 382.688 154.953L324.619 255.53C333.233 270.448 337.044 283.55 336.05 294.834L394.118 194.257Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M235.432 72.0311C216.88 72.0304 202.027 75.5681 190.875 82.6442L132.806 183.221C143.959 176.145 158.812 172.607 177.363 172.608L235.432 72.0311Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M265.59 124.25C276.191 124.251 286.24 127.12 295.737 132.858L237.669 233.435C228.172 227.697 218.123 224.828 207.522 224.827L265.59 124.25Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M295.719 132.859C305.326 138.406 312.78 145.77 318.081 154.95L260.013 255.527C254.712 246.347 247.258 238.983 237.651 233.436L295.719 132.859Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M387.218 217.608C391.227 210.66 393.527 202.874 394.117 194.25L336.049 294.827C335.459 303.451 333.159 311.237 329.15 318.185L387.218 217.608Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M245.211 132.577C248.413 127.03 255.204 124.257 265.584 124.258L207.516 224.835C197.136 224.834 190.345 227.607 187.143 233.154L245.211 132.577Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M318.094 154.945C322.842 163.17 324.002 171.107 321.573 178.757L263.505 279.334C265.934 271.684 264.774 263.746 260.026 255.522L318.094 154.945Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M176.925 96.6737C180.127 91.1249 184.776 86.4503 190.871 82.6499L132.803 183.227C126.708 187.027 122.059 191.702 118.857 197.25L176.925 96.6737Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M387.226 217.606C385.989 219.749 384.59 221.813 383.028 223.797L324.96 324.373C326.522 322.39 327.921 320.326 329.157 318.183L387.226 217.606Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M317.269 188.408C319.087 185.262 320.519 182.045 321.562 178.758L263.494 279.335C262.451 282.622 261.019 285.839 259.201 288.985L317.269 188.408Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M245.208 132.573C241.895 137.928 243 145.387 248.522 154.95L190.454 255.527C184.932 245.964 183.827 238.505 187.14 233.15L245.208 132.573Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M176.93 96.6719C174.331 101.175 172.686 106.255 171.993 111.91L113.925 212.487C114.618 206.831 116.263 201.752 118.862 197.249L176.93 96.6719Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M317.266 188.413C314.853 192.589 311.757 196.64 307.978 200.566L249.91 301.143C253.689 297.216 256.785 293.166 259.198 288.99L317.266 188.413Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M464.198 304.708L435.375 254.789L377.307 355.366L406.13 405.285L464.198 304.708Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M353.209 254.787C366.68 242.548 376.618 232.22 383.023 223.805L324.955 324.382C318.55 332.797 308.612 343.124 295.141 355.364L353.209 254.787Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M435.37 254.787L353.212 254.784L295.144 355.361L377.302 355.364L435.37 254.787Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M183.921 154.947L248.521 154.95L190.453 255.527L125.853 255.524L183.921 154.947Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M171.992 111.914C170.668 124.537 174.643 138.881 183.92 154.947L125.852 255.524C116.575 239.458 112.599 225.114 113.924 212.491L171.992 111.914Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M307.987 200.562C301.251 207.256 291.203 216.244 277.842 227.528L219.774 328.105C233.135 316.821 243.183 307.832 249.919 301.139L307.987 200.562Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M15.5469 75.1797L44.5359 125.386L-13.5321 225.963L-42.5212 175.756L15.5469 75.1797Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M277.836 227.536C264.033 238.82 253.708 247.904 246.862 254.789L188.794 355.366C195.64 348.481 205.965 339.397 219.768 328.113L277.836 227.536Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M275.358 304.706L464.189 304.713L406.12 405.29L217.29 405.283L275.358 304.706Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M44.5279 125.39L67.3864 125.39L9.31834 225.967L-13.5401 225.966L44.5279 125.39Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M101.341 75.1911L233.863 304.705L175.795 405.282L43.2733 175.768L101.341 75.1911ZM15.5431 75.19L-42.525 175.767L43.277 175.77L101.345 75.1932L15.5431 75.19Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M246.866 254.784L246.534 254.784L188.466 355.361L188.798 355.361L246.866 254.784Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M246.539 254.781L275.362 304.701L217.294 405.277L188.471 355.358L246.539 254.781Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M67.3906 125.391L170.923 304.698L112.855 405.275L9.32257 225.967L67.3906 125.391Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M170.921 304.699L233.865 304.701L175.797 405.278L112.853 405.276L170.921 304.699Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                        </g>
-                        <g
-                            :style="{ mixBlendMode: 'hard-light' }"
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                        >
-                            <path
-                                d="M246.544 254.79L246.875 254.79C253.722 247.905 264.046 238.82 277.849 227.537C291.21 216.253 301.259 207.264 307.995 200.57C314.62 193.685 319.147 186.418 321.577 178.768C324.006 171.117 322.846 163.18 318.097 154.956C312.796 145.775 305.342 138.412 295.735 132.865C286.238 127.127 276.189 124.258 265.588 124.257C255.208 124.257 248.416 127.03 245.214 132.576C241.902 137.931 243.006 145.39 248.528 154.953L183.928 154.951C174.652 138.885 170.676 124.541 172 111.918C173.546 99.2946 179.84 89.5408 190.882 82.6559C202.035 75.5798 216.887 72.0421 235.439 72.0428C254.874 72.0435 274.144 75.5825 293.248 82.6598C312.242 89.5457 329.579 99.3005 345.261 111.924C360.942 124.548 373.421 138.892 382.697 154.958C391.311 169.877 395.121 182.978 394.128 194.262C393.355 205.546 389.656 215.396 383.031 223.811C376.627 232.226 366.688 242.554 353.217 254.794L435.375 254.797L464.198 304.716L275.367 304.709L246.544 254.79Z"
-                                fill="#F0ACB8"
-                            />
-                            <path
-                                d="M246.544 254.79L246.875 254.79C253.722 247.905 264.046 238.82 277.849 227.537C291.21 216.253 301.259 207.264 307.995 200.57C314.62 193.685 319.147 186.418 321.577 178.768C324.006 171.117 322.846 163.18 318.097 154.956C312.796 145.775 305.342 138.412 295.735 132.865C286.238 127.127 276.189 124.258 265.588 124.257C255.208 124.257 248.416 127.03 245.214 132.576C241.902 137.931 243.006 145.39 248.528 154.953L183.928 154.951C174.652 138.885 170.676 124.541 172 111.918C173.546 99.2946 179.84 89.5408 190.882 82.6559C202.035 75.5798 216.887 72.0421 235.439 72.0428C254.874 72.0435 274.144 75.5825 293.248 82.6598C312.242 89.5457 329.579 99.3005 345.261 111.924C360.942 124.548 373.421 138.892 382.697 154.958C391.311 169.877 395.121 182.978 394.128 194.262C393.355 205.546 389.656 215.396 383.031 223.811C376.627 232.226 366.688 242.554 353.217 254.794L435.375 254.797L464.198 304.716L275.367 304.709L246.544 254.79Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                                stroke-linejoin="round"
-                            />
-                        </g>
-                        <g
-                            :style="{ mixBlendMode: 'hard-light' }"
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                        >
-                            <path
-                                d="M67.41 125.402L44.5515 125.401L15.5625 75.1953L101.364 75.1985L233.886 304.712L170.942 304.71L67.41 125.402Z"
-                                fill="#F0ACB8"
-                            />
-                            <path
-                                d="M67.41 125.402L44.5515 125.401L15.5625 75.1953L101.364 75.1985L233.886 304.712L170.942 304.71L67.41 125.402Z"
-                                stroke="#1B1B18"
-                                stroke-width="1"
-                            />
-                        </g>
-                    </svg>
-                    <svg
-                        class="relative -ml-8 -mt-[4.9rem] hidden w-[448px] max-w-none dark:block lg:-mt-[6.6rem] lg:ml-0"
-                        viewBox="0 0 440 376"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <g class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300">
-                            <path
-                                d="M188.263 355.73L188.595 355.73C195.441 348.845 205.766 339.761 219.569 328.477C232.93 317.193 242.978 308.205 249.714 301.511C256.34 294.626 260.867 287.358 263.296 279.708C265.725 272.058 264.565 264.121 259.816 255.896C254.516 246.716 247.062 239.352 237.454 233.805C227.957 228.067 217.908 225.198 207.307 225.198C196.927 225.197 190.136 227.97 186.934 233.516C183.621 238.872 184.726 246.331 190.247 255.894L125.647 255.891C116.371 239.825 112.395 225.481 113.72 212.858C115.265 200.235 121.559 190.481 132.602 183.596C143.754 176.52 158.607 172.982 177.159 172.983C196.594 172.984 215.863 176.523 234.968 183.6C253.961 190.486 271.299 200.241 286.98 212.864C302.661 225.488 315.14 239.833 324.416 255.899C333.03 270.817 336.841 283.918 335.847 295.203C335.075 306.487 331.376 316.336 324.75 324.751C318.346 333.167 308.408 343.494 294.936 355.734L377.094 355.737L405.917 405.656L217.087 405.649L188.263 355.73Z"
-                                fill="black"
-                            />
-                            <path
-                                d="M9.11884 226.339L-13.7396 226.338L-42.7286 176.132L43.0733 176.135L175.595 405.649L112.651 405.647L9.11884 226.339Z"
-                                fill="black"
-                            />
-                            <path
-                                d="M188.263 355.73L188.595 355.73C195.441 348.845 205.766 339.761 219.569 328.477C232.93 317.193 242.978 308.205 249.714 301.511C256.34 294.626 260.867 287.358 263.296 279.708C265.725 272.058 264.565 264.121 259.816 255.896C254.516 246.716 247.062 239.352 237.454 233.805C227.957 228.067 217.908 225.198 207.307 225.198C196.927 225.197 190.136 227.97 186.934 233.516C183.621 238.872 184.726 246.331 190.247 255.894L125.647 255.891C116.371 239.825 112.395 225.481 113.72 212.858C115.265 200.235 121.559 190.481 132.602 183.596C143.754 176.52 158.607 172.982 177.159 172.983C196.594 172.984 215.863 176.523 234.968 183.6C253.961 190.486 271.299 200.241 286.98 212.864C302.661 225.488 315.14 239.833 324.416 255.899C333.03 270.817 336.841 283.918 335.847 295.203C335.075 306.487 331.376 316.336 324.75 324.751C318.346 333.167 308.408 343.494 294.936 355.734L377.094 355.737L405.917 405.656L217.087 405.649L188.263 355.73Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M9.11884 226.339L-13.7396 226.338L-42.7286 176.132L43.0733 176.135L175.595 405.649L112.651 405.647L9.11884 226.339Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M204.592 327.449L204.923 327.449C211.769 320.564 222.094 311.479 235.897 300.196C249.258 288.912 259.306 279.923 266.042 273.23C272.668 266.345 277.195 259.077 279.624 251.427C282.053 243.777 280.893 235.839 276.145 227.615C270.844 218.435 263.39 211.071 253.782 205.524C244.285 199.786 234.236 196.917 223.635 196.916C213.255 196.916 206.464 199.689 203.262 205.235C199.949 210.59 201.054 218.049 206.575 227.612L141.975 227.61C132.699 211.544 128.723 197.2 130.048 184.577C131.593 171.954 137.887 162.2 148.93 155.315C160.083 148.239 174.935 144.701 193.487 144.702C212.922 144.703 232.192 148.242 251.296 155.319C270.289 162.205 287.627 171.96 303.308 184.583C318.989 197.207 331.468 211.552 340.745 227.618C349.358 242.536 353.169 255.637 352.175 266.921C351.403 278.205 347.704 288.055 341.078 296.47C334.674 304.885 324.736 315.213 311.264 327.453L393.422 327.456L422.246 377.375L233.415 377.368L204.592 327.449Z"
-                                fill="#391800"
-                            />
-                            <path
-                                d="M25.447 198.058L2.58852 198.057L-26.4005 147.851L59.4015 147.854L191.923 377.368L128.979 377.365L25.447 198.058Z"
-                                fill="#391800"
-                            />
-                            <path
-                                d="M204.592 327.449L204.923 327.449C211.769 320.564 222.094 311.479 235.897 300.196C249.258 288.912 259.306 279.923 266.042 273.23C272.668 266.345 277.195 259.077 279.624 251.427C282.053 243.777 280.893 235.839 276.145 227.615C270.844 218.435 263.39 211.071 253.782 205.524C244.285 199.786 234.236 196.917 223.635 196.916C213.255 196.916 206.464 199.689 203.262 205.235C199.949 210.59 201.054 218.049 206.575 227.612L141.975 227.61C132.699 211.544 128.723 197.2 130.048 184.577C131.593 171.954 137.887 162.2 148.93 155.315C160.083 148.239 174.935 144.701 193.487 144.702C212.922 144.703 232.192 148.242 251.296 155.319C270.289 162.205 287.627 171.96 303.308 184.583C318.989 197.207 331.468 211.552 340.745 227.618C349.358 242.536 353.169 255.637 352.175 266.921C351.403 278.205 347.704 288.055 341.078 296.47C334.674 304.885 324.736 315.213 311.264 327.453L393.422 327.456L422.246 377.375L233.415 377.368L204.592 327.449Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M25.447 198.058L2.58852 198.057L-26.4005 147.851L59.4015 147.854L191.923 377.368L128.979 377.365L25.447 198.058Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                            :style="{ mixBlendMode: 'hard-light' }"
-                        >
-                            <path
-                                d="M217.342 305.363L217.673 305.363C224.519 298.478 234.844 289.393 248.647 278.11C262.008 266.826 272.056 257.837 278.792 251.144C285.418 244.259 289.945 236.991 292.374 229.341C294.803 221.691 293.643 213.753 288.895 205.529C283.594 196.349 276.14 188.985 266.532 183.438C257.035 177.7 246.986 174.831 236.385 174.83C226.005 174.83 219.214 177.603 216.012 183.149C212.699 188.504 213.804 195.963 219.325 205.527L154.725 205.524C145.449 189.458 141.473 175.114 142.798 162.491C144.343 149.868 150.637 140.114 161.68 133.229C172.833 126.153 187.685 122.615 206.237 122.616C225.672 122.617 244.942 126.156 264.046 133.233C283.039 140.119 300.377 149.874 316.058 162.497C331.739 175.121 344.218 189.466 353.495 205.532C362.108 220.45 365.919 233.551 364.925 244.835C364.153 256.12 360.454 265.969 353.828 274.384C347.424 282.799 337.486 293.127 324.014 305.367L406.172 305.37L434.996 355.289L246.165 355.282L217.342 305.363Z"
-                                fill="#733000"
-                            />
-                            <path
-                                d="M38.197 175.972L15.3385 175.971L-13.6505 125.765L72.1515 125.768L204.673 355.282L141.729 355.279L38.197 175.972Z"
-                                fill="#733000"
-                            />
-                            <path
-                                d="M217.342 305.363L217.673 305.363C224.519 298.478 234.844 289.393 248.647 278.11C262.008 266.826 272.056 257.837 278.792 251.144C285.418 244.259 289.945 236.991 292.374 229.341C294.803 221.691 293.643 213.753 288.895 205.529C283.594 196.349 276.14 188.985 266.532 183.438C257.035 177.7 246.986 174.831 236.385 174.83C226.005 174.83 219.214 177.603 216.012 183.149C212.699 188.504 213.804 195.963 219.325 205.527L154.725 205.524C145.449 189.458 141.473 175.114 142.798 162.491C144.343 149.868 150.637 140.114 161.68 133.229C172.833 126.153 187.685 122.615 206.237 122.616C225.672 122.617 244.942 126.156 264.046 133.233C283.039 140.119 300.377 149.874 316.058 162.497C331.739 175.121 344.218 189.466 353.495 205.532C362.108 220.45 365.919 233.551 364.925 244.835C364.153 256.12 360.454 265.969 353.828 274.384C347.424 282.799 337.486 293.127 324.014 305.367L406.172 305.37L434.996 355.289L246.165 355.282L217.342 305.363Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M38.197 175.972L15.3385 175.971L-13.6505 125.765L72.1515 125.768L204.673 355.282L141.729 355.279L38.197 175.972Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300">
-                            <path
-                                d="M217.342 305.363L217.673 305.363C224.519 298.478 234.844 289.393 248.647 278.11C262.008 266.826 272.056 257.837 278.792 251.144C285.418 244.259 289.945 236.991 292.374 229.341C294.803 221.691 293.643 213.753 288.895 205.529C283.594 196.349 276.14 188.985 266.532 183.438C257.035 177.7 246.986 174.831 236.385 174.83C226.005 174.83 219.214 177.603 216.012 183.149C212.699 188.504 213.804 195.963 219.325 205.527L154.726 205.524C145.449 189.458 141.473 175.114 142.798 162.491C144.343 149.868 150.637 140.114 161.68 133.229C172.833 126.153 187.685 122.615 206.237 122.616C225.672 122.617 244.942 126.156 264.046 133.233C283.039 140.119 300.377 149.874 316.058 162.497C331.739 175.121 344.218 189.466 353.495 205.532C362.108 220.45 365.919 233.551 364.925 244.835C364.153 256.12 360.454 265.969 353.828 274.384C347.424 282.799 337.486 293.127 324.014 305.367L406.172 305.37L434.996 355.289L246.165 355.282L217.342 305.363Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                            <path
-                                d="M38.197 175.972L15.3385 175.971L-13.6505 125.765L72.1515 125.768L204.673 355.282L141.729 355.279L38.197 175.972Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                        </g>
-                        <g class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300">
-                            <path
-                                d="M188.467 355.363L188.798 355.363C195.644 348.478 205.969 339.393 219.772 328.11C233.133 316.826 243.181 307.837 249.917 301.144C253.696 297.217 256.792 293.166 259.205 288.991C261.024 285.845 262.455 282.628 263.499 279.341C265.928 271.691 264.768 263.753 260.02 255.529C254.719 246.349 247.265 238.985 237.657 233.438C228.16 227.7 218.111 224.831 207.51 224.83C197.13 224.83 190.339 227.603 187.137 233.149C183.824 238.504 184.929 245.963 190.45 255.527L125.851 255.524C116.574 239.458 112.598 225.114 113.923 212.491C114.615 206.836 116.261 201.756 118.859 197.253C122.061 191.704 126.709 187.03 132.805 183.229C143.958 176.153 158.81 172.615 177.362 172.616C196.797 172.617 216.067 176.156 235.171 183.233C254.164 190.119 271.502 199.874 287.183 212.497C302.864 225.121 315.343 239.466 324.62 255.532C333.233 270.45 337.044 283.551 336.05 294.835C335.46 303.459 333.16 311.245 329.151 318.194C327.915 320.337 326.515 322.4 324.953 324.384C318.549 332.799 308.611 343.127 295.139 355.367L377.297 355.37L406.121 405.289L217.29 405.282L188.467 355.363Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M9.32197 225.972L-13.5365 225.971L-42.5255 175.765L43.2765 175.768L175.798 405.282L112.854 405.279L9.32197 225.972Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M345.247 111.915C329.566 99.2919 312.229 89.5371 293.235 82.6512L235.167 183.228C254.161 190.114 271.498 199.869 287.179 212.492L345.247 111.915Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M382.686 154.964C373.41 138.898 360.931 124.553 345.25 111.93L287.182 212.506C302.863 225.13 315.342 239.475 324.618 255.541L382.686 154.964Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M293.243 82.6472C274.139 75.57 254.869 72.031 235.434 72.0303L177.366 172.607C196.801 172.608 216.071 176.147 235.175 183.224L293.243 82.6472Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M394.118 194.257C395.112 182.973 391.301 169.872 382.688 154.953L324.619 255.53C333.233 270.448 337.044 283.55 336.05 294.834L394.118 194.257Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M235.432 72.0311C216.88 72.0304 202.027 75.5681 190.875 82.6442L132.806 183.221C143.959 176.145 158.812 172.607 177.363 172.608L235.432 72.0311Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M265.59 124.25C276.191 124.251 286.24 127.12 295.737 132.858L237.669 233.435C228.172 227.697 218.123 224.828 207.522 224.827L265.59 124.25Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M295.719 132.859C305.326 138.406 312.78 145.77 318.081 154.95L260.013 255.527C254.712 246.347 247.258 238.983 237.651 233.436L295.719 132.859Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M387.218 217.608C391.227 210.66 393.527 202.874 394.117 194.25L336.049 294.827C335.459 303.451 333.159 311.237 329.15 318.185L387.218 217.608Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M245.211 132.577C248.413 127.03 255.204 124.257 265.584 124.258L207.516 224.835C197.136 224.834 190.345 227.607 187.143 233.154L245.211 132.577Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M318.094 154.945C322.842 163.17 324.002 171.107 321.573 178.757L263.505 279.334C265.934 271.684 264.774 263.746 260.026 255.522L318.094 154.945Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M176.925 96.6737C180.127 91.1249 184.776 86.4503 190.871 82.6499L132.803 183.227C126.708 187.027 122.059 191.702 118.857 197.25L176.925 96.6737Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M387.226 217.606C385.989 219.749 384.59 221.813 383.028 223.797L324.96 324.373C326.522 322.39 327.921 320.326 329.157 318.183L387.226 217.606Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M317.269 188.408C319.087 185.262 320.519 182.045 321.562 178.758L263.494 279.335C262.451 282.622 261.019 285.839 259.201 288.985L317.269 188.408Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M245.208 132.573C241.895 137.928 243 145.387 248.522 154.95L190.454 255.527C184.932 245.964 183.827 238.505 187.14 233.15L245.208 132.573Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M176.93 96.6719C174.331 101.175 172.686 106.255 171.993 111.91L113.925 212.487C114.618 206.831 116.263 201.752 118.862 197.249L176.93 96.6719Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M317.266 188.413C314.853 192.589 311.757 196.64 307.978 200.566L249.91 301.143C253.689 297.216 256.785 293.166 259.198 288.99L317.266 188.413Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M464.198 304.708L435.375 254.789L377.307 355.366L406.13 405.285L464.198 304.708Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M353.209 254.787C366.68 242.548 376.618 232.22 383.023 223.805L324.955 324.382C318.55 332.797 308.612 343.124 295.141 355.364L353.209 254.787Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M435.37 254.787L353.212 254.784L295.144 355.361L377.302 355.364L435.37 254.787Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M183.921 154.947L248.521 154.95L190.453 255.527L125.853 255.524L183.921 154.947Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M171.992 111.914C170.668 124.537 174.643 138.881 183.92 154.947L125.852 255.524C116.575 239.458 112.599 225.114 113.924 212.491L171.992 111.914Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M307.987 200.562C301.251 207.256 291.203 216.244 277.842 227.528L219.774 328.105C233.135 316.821 243.183 307.832 249.919 301.139L307.987 200.562Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M15.5469 75.1797L44.5359 125.386L-13.5321 225.963L-42.5212 175.756L15.5469 75.1797Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M277.836 227.536C264.033 238.82 253.708 247.904 246.862 254.789L188.794 355.366C195.64 348.481 205.965 339.397 219.768 328.113L277.836 227.536Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M275.358 304.706L464.189 304.713L406.12 405.29L217.29 405.283L275.358 304.706Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M44.5279 125.39L67.3864 125.39L9.31834 225.967L-13.5401 225.966L44.5279 125.39Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M101.341 75.1911L233.863 304.705L175.795 405.282L43.2733 175.768L101.341 75.1911ZM15.5431 75.19L-42.525 175.767L43.277 175.77L101.345 75.1932L15.5431 75.19Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M246.866 254.784L246.534 254.784L188.466 355.361L188.798 355.361L246.866 254.784Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M246.539 254.781L275.362 304.701L217.294 405.277L188.471 355.358L246.539 254.781Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M67.3906 125.391L170.923 304.698L112.855 405.275L9.32257 225.967L67.3906 125.391Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                            <path
-                                d="M170.921 304.699L233.865 304.701L175.797 405.278L112.853 405.276L170.921 304.699Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="bevel"
-                            />
-                        </g>
-                        <g
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                            :style="{ mixBlendMode: 'hard-light' }"
-                        >
-                            <path
-                                d="M246.544 254.79L246.875 254.79C253.722 247.905 264.046 238.82 277.849 227.537C291.21 216.253 301.259 207.264 307.995 200.57C314.62 193.685 319.147 186.418 321.577 178.768C324.006 171.117 322.846 163.18 318.097 154.956C312.796 145.775 305.342 138.412 295.735 132.865C286.238 127.127 276.189 124.258 265.588 124.257C255.208 124.257 248.416 127.03 245.214 132.576C241.902 137.931 243.006 145.39 248.528 154.953L183.928 154.951C174.652 138.885 170.676 124.541 172 111.918C173.546 99.2946 179.84 89.5408 190.882 82.6559C202.035 75.5798 216.887 72.0421 235.439 72.0428C254.874 72.0435 274.144 75.5825 293.248 82.6598C312.242 89.5457 329.579 99.3005 345.261 111.924C360.942 124.548 373.421 138.892 382.697 154.958C391.311 169.877 395.121 182.978 394.128 194.262C393.355 205.546 389.656 215.396 383.031 223.811C376.627 232.226 366.688 242.554 353.217 254.794L435.375 254.797L464.198 304.716L275.367 304.709L246.544 254.79Z"
-                                fill="#4B0600"
-                            />
-                            <path
-                                d="M246.544 254.79L246.875 254.79C253.722 247.905 264.046 238.82 277.849 227.537C291.21 216.253 301.259 207.264 307.995 200.57C314.62 193.685 319.147 186.418 321.577 178.768C324.006 171.117 322.846 163.18 318.097 154.956C312.796 145.775 305.342 138.412 295.735 132.865C286.238 127.127 276.189 124.258 265.588 124.257C255.208 124.257 248.416 127.03 245.214 132.576C241.902 137.931 243.006 145.39 248.528 154.953L183.928 154.951C174.652 138.885 170.676 124.541 172 111.918C173.546 99.2946 179.84 89.5408 190.882 82.6559C202.035 75.5798 216.887 72.0421 235.439 72.0428C254.874 72.0435 274.144 75.5825 293.248 82.6598C312.242 89.5457 329.579 99.3005 345.261 111.924C360.942 124.548 373.421 138.892 382.697 154.958C391.311 169.877 395.121 182.978 394.128 194.262C393.355 205.546 389.656 215.396 383.031 223.811C376.627 232.226 366.688 242.554 353.217 254.794L435.375 254.797L464.198 304.716L275.367 304.709L246.544 254.79Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                                stroke-linejoin="round"
-                            />
-                        </g>
-                        <g
-                            class="duration-750 starting:translate-y-4 starting:opacity-0 translate-y-0 opacity-100 transition-all delay-300"
-                            :style="{ mixBlendMode: 'hard-light' }"
-                        >
-                            <path
-                                d="M67.41 125.402L44.5515 125.401L15.5625 75.1953L101.364 75.1985L233.886 304.712L170.942 304.71L67.41 125.402Z"
-                                fill="#4B0600"
-                            />
-                            <path
-                                d="M67.41 125.402L44.5515 125.401L15.5625 75.1953L101.364 75.1985L233.886 304.712L170.942 304.71L67.41 125.402Z"
-                                stroke="#FF750F"
-                                stroke-width="1"
-                            />
-                        </g>
-                    </svg>
+            </section>
+
+            <section
+                id="dampak"
+                ref="proofSection"
+                class="proof relative overflow-hidden bg-[#171512] px-5 py-14 text-[#F2EEE5] sm:px-8 lg:px-12 lg:py-[72px]"
+            >
+                <div class="proof-glow proof-left absolute -left-20 top-[-120px] size-[350px] rounded-full"></div>
+                <div class="proof-glow proof-right absolute -right-10 bottom-[-160px] size-[420px] rounded-full"></div>
+                <div class="relative mx-auto grid max-w-[1160px] gap-8 sm:grid-cols-3 sm:gap-6">
                     <div
-                        class="absolute inset-0 rounded-t-lg shadow-[inset_0px_0px_0px_1px_rgba(26,26,0,0.16)] dark:shadow-[inset_0px_0px_0px_1px_#fffaed2d] lg:overflow-hidden lg:rounded-r-lg lg:rounded-t-none"
-                    />
+                        v-for="(item, index) in [
+                            { suffix: ' steps', label: 'from monitoring to action', icon: ScanEye },
+                            { suffix: ' paths', label: 'markdowns or targeted donations', icon: ArrowRight },
+                            { suffix: ' workflows', label: 'connected for operations teams', icon: Sparkles },
+                        ]"
+                        :key="item.label"
+                        class="reveal flex items-center gap-4 border-b border-white/10 pb-7 last:border-0 sm:border-0"
+                    >
+                        <div class="grid size-11 place-items-center rounded-full border border-white/15 bg-white/[.06] text-[#bdcaa6]">
+                            <component :is="item.icon" class="size-[18px]" />
+                        </div>
+                        <div>
+                            <p class="font-serif text-[38px] leading-none">
+                                {{ counts[index] }}<span class="ml-1 text-[16px] italic text-[#9eab88]">{{ item.suffix }}</span>
+                            </p>
+                            <p class="mt-2 text-[10px] text-white/50">{{ item.label }}</p>
+                        </div>
+                    </div>
                 </div>
-            </main>
-        </div>
-        <div class="h-14.5 hidden lg:block"></div>
+            </section>
+
+            <section id="solusi" class="px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
+                <div class="mx-auto max-w-[1320px]">
+                    <div class="reveal mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <p class="mb-4 text-[10px] font-semibold uppercase tracking-[.18em] text-[#71805f]">One ecosystem, three decisions</p>
+                            <h2 class="w-anim font-serif text-[clamp(2.8rem,6vw,5.3rem)] leading-[.92]">
+                                Food moves<br /><span class="italic text-[#3B4B34]">further.</span>
+                            </h2>
+                        </div>
+                        <p class="max-w-[360px] text-[12px] leading-6 text-[#77746a]">
+                            Turn unpredictable inventory into clearer, measurable decisions with a path forward.
+                        </p>
+                    </div>
+                    <div class="reveal mb-5 flex justify-between">
+                        <p class="text-[10px] text-[#79766d]">Tools for every stage of food recovery</p>
+                        <div class="flex gap-2">
+                            <button
+                                aria-label="Scroll features left"
+                                @click="scrollFeatures(-1)"
+                                class="grid size-10 place-items-center rounded-full border border-[#dcd7cb] bg-white/40"
+                            >
+                                <ChevronLeft class="size-4" /></button
+                            ><button
+                                aria-label="Scroll features right"
+                                @click="scrollFeatures(1)"
+                                class="grid size-10 place-items-center rounded-full border border-[#dcd7cb] bg-white/40"
+                            >
+                                <ChevronRight class="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                    <div
+                        ref="carousel"
+                        class="feature-carousel flex snap-x snap-mandatory gap-5 overflow-x-auto px-[max(2rem,calc((100vw-1200px)/2+2rem))] pb-5 [scrollbar-width:none]"
+                    >
+                        <article
+                            v-for="feature in features"
+                            :key="feature.eyebrow"
+                            class="grad-border group min-w-[82vw] snap-start overflow-hidden rounded-[28px] bg-[#faf8f2] sm:min-w-[440px] lg:min-w-[calc((100vw-120px)/3)] lg:max-w-[420px]"
+                        >
+                            <div class="relative h-[240px] overflow-hidden sm:h-[280px]">
+                                <img
+                                    :src="feature.image"
+                                    :alt="feature.alt"
+                                    loading="lazy"
+                                    class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                />
+                                <div class="absolute inset-0 bg-gradient-to-t from-[#171512]/45 via-transparent"></div>
+                                <span
+                                    class="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/15 px-3 py-1.5 text-[9px] text-white backdrop-blur-xl"
+                                    ><component :is="feature.icon" class="size-3" />{{ feature.eyebrow }}</span
+                                ><ArrowUpRight class="absolute bottom-5 right-5 size-4 text-white" />
+                            </div>
+                            <div class="p-5 sm:p-6">
+                                <h3 class="font-serif text-[29px] leading-[1.02]">{{ feature.title }}</h3>
+                                <p class="mt-3 text-[11px] leading-5 text-[#7b786e]">{{ feature.description }}</p>
+                                <div class="mt-5 h-px bg-[#e7e2d8]"></div>
+                                <div class="mt-4 flex justify-between text-[9px] text-[#77746a]">
+                                    <span>EcoLoop · {{ feature.eyebrow.split(' · ')[1] }}</span
+                                    ><ArrowRight class="size-3.5 text-[#3B4B34]" />
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section id="alur" class="bg-[#e9e5da] px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
+                <div class="mx-auto grid max-w-[1180px] items-center gap-12 lg:grid-cols-[.9fr_1.1fr]">
+                    <div class="reveal">
+                        <p class="mb-4 text-[10px] font-semibold uppercase tracking-[.18em] text-[#71805f]">A workflow that makes sense</p>
+                        <h2 class="w-anim font-serif text-[clamp(2.8rem,6vw,5.1rem)] leading-[.94]">
+                            From shelf,<br />toward <span class="italic text-[#3B4B34]">impact.</span>
+                        </h2>
+                        <p class="mt-6 max-w-[410px] text-[12px] leading-6 text-[#77746a]">
+                            Bring inventory visibility, reviewable recommendations, and partner coordination together in one workflow.
+                        </p>
+                        <Link
+                            :href="primaryHref"
+                            class="btn-lift mt-8 inline-flex items-center gap-3 rounded-full bg-[#3B4B34] px-6 py-3.5 text-[11px] font-semibold text-white"
+                            >{{ primaryLabel }} <ArrowRight class="size-4"
+                        /></Link>
+                    </div>
+                    <div class="reveal relative mx-auto w-full max-w-[560px]">
+                        <div class="absolute inset-[15%] rounded-full bg-[#b5bf9f]/30 blur-3xl"></div>
+                        <svg class="absolute inset-0 size-full" viewBox="0 0 760 380" fill="none" aria-hidden="true">
+                            <path
+                                d="M380 190 L110 80 M380 190 L640 90 M380 190 L90 260 M380 190 L660 270 M380 190 L250 330 M380 190 L510 40"
+                                stroke="#8E9C75"
+                                stroke-opacity=".35"
+                                stroke-dasharray="3 6"
+                            />
+                            <circle cx="380" cy="190" r="124" stroke="#8E9C75" stroke-opacity=".25" />
+                            <circle cx="380" cy="190" r="180" stroke="#8E9C75" stroke-opacity=".18" />
+                        </svg>
+                        <div class="relative flex aspect-[1.35] items-center justify-center">
+                            <div class="relative z-10 grid size-[110px] place-items-center rounded-full bg-[#3B4B34] text-white shadow-xl">
+                                <div class="text-center"><Leaf class="mx-auto size-6" /><span class="text-[9px] font-semibold">ECOLOOP</span></div>
+                            </div>
+                            <div
+                                v-for="(node, index) in nodes"
+                                :key="node.label"
+                                class="orbit-node absolute z-10 flex flex-col items-center gap-1.5"
+                                :class="node.pos"
+                                :style="{ animationDelay: index * -0.65 + 's' }"
+                            >
+                                <div
+                                    class="grid size-11 place-items-center rounded-2xl border border-white/70 bg-[#F8F6F0]/90 text-[#3B4B34] shadow-lg"
+                                >
+                                    <component :is="node.icon" class="size-[17px]" />
+                                </div>
+                                <span class="rounded-full bg-[#F2EEE5]/80 px-2 py-1 text-[8px]">{{ node.label }}</span>
+                            </div>
+                        </div>
+                        <div class="relative mx-auto grid max-w-[450px] gap-2 sm:grid-cols-3">
+                            <div class="rounded-2xl border border-white/65 bg-white/35 p-3">
+                                <p class="text-[9px] font-semibold">01 · Monitor</p>
+                                <p class="text-[8px] text-[#817e73]">Inventory and shelf life</p>
+                            </div>
+                            <div class="rounded-2xl border border-white/65 bg-white/35 p-3">
+                                <p class="text-[9px] font-semibold">02 · Decide</p>
+                                <p class="text-[8px] text-[#817e73]">Discount or donation</p>
+                            </div>
+                            <div class="rounded-2xl border border-white/65 bg-white/35 p-3">
+                                <p class="text-[9px] font-semibold">03 · Route</p>
+                                <p class="text-[8px] text-[#817e73]">Partner follow-up</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="integrasi" class="relative px-5 py-24 sm:px-8 lg:px-12 lg:py-32">
+                <div class="mx-auto grid max-w-[1180px] items-center gap-12 lg:grid-cols-2">
+                    <div class="reveal">
+                        <p class="mb-4 text-[10px] font-semibold uppercase tracking-[.18em] text-[#71805f]">Works with your ecosystem</p>
+                        <h2 class="w-anim font-serif text-[clamp(2.8rem,6vw,5rem)] leading-[.94]">
+                            One cycle.<br /><span class="italic text-[#3B4B34]">Many connections.</span>
+                        </h2>
+                        <p class="mt-6 max-w-[420px] text-[12px] leading-6 text-[#77746a]">
+                            Connect inventory sources, smart monitoring, and donation partners so each decision starts with the operational context
+                            it needs.
+                        </p>
+                        <div class="mt-7 flex flex-wrap gap-2">
+                            <span class="rounded-full border border-[#d9d6ca] bg-white/35 px-3 py-1.5 text-[9px]">POS sync</span
+                            ><span class="rounded-full border border-[#d9d6ca] bg-white/35 px-3 py-1.5 text-[9px]">Partner notifications</span
+                            ><span class="rounded-full border border-[#d9d6ca] bg-white/35 px-3 py-1.5 text-[9px]">AI & computer vision</span>
+                        </div>
+                    </div>
+                    <div class="reveal rounded-[30px] border border-white/75 bg-white/30 p-5 shadow-xl backdrop-blur-2xl sm:p-8">
+                        <p class="text-[9px] font-semibold uppercase tracking-[.16em] text-[#8b887d]">EcoLoop network</p>
+                        <p class="mt-1 font-serif text-[28px]">Connected workflows</p>
+                        <div class="mt-6 flex flex-col gap-2.5">
+                            <div
+                                v-for="(item, index) in [
+                                    { title: 'Store dashboard', desc: 'Products · batches · shelf life', icon: Store },
+                                    { title: 'EcoLoop intelligence', desc: 'Forecasts · recommendations · audit', icon: Bot },
+                                    { title: 'Donation partners', desc: 'Discounts · donations · notifications', icon: Handshake },
+                                ]"
+                                :key="item.title"
+                                class="flex items-center gap-3 rounded-2xl border border-[#e4e0d6] bg-white/70 p-3.5"
+                            >
+                                <div class="grid size-10 place-items-center rounded-xl bg-[#e8ecdf] text-[#3B4B34]">
+                                    <component :is="item.icon" class="size-[17px]" />
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-semibold">{{ item.title }}</p>
+                                    <p class="mt-1 text-[8px] text-[#908c81]">{{ item.desc }}</p>
+                                </div>
+                                <Check v-if="index === 2" class="ml-auto size-4 text-[#71805f]" />
+                            </div>
+                        </div>
+                        <div class="mt-4 flex items-center justify-between rounded-2xl bg-[#3B4B34] px-4 py-3.5 text-white">
+                            <span class="text-[9px]">Data flows in one cycle</span><ArrowRight class="size-4" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="pricing" class="px-5 py-12 sm:px-8 lg:px-12 lg:py-20">
+                <div
+                    class="pilot grad-border relative mx-auto max-w-[1320px] overflow-hidden rounded-[32px] bg-[#3B4B34] px-6 py-12 text-[#F2EEE5] sm:px-12 lg:px-16 lg:py-16"
+                >
+                    <div class="pilot-grain absolute inset-0 opacity-25"></div>
+                    <div class="absolute -right-20 -top-36 size-[450px] rounded-full border border-white/10"></div>
+                    <div class="relative grid items-end gap-10 lg:grid-cols-[1fr_auto]">
+                        <div class="reveal max-w-[650px]">
+                            <p
+                                class="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/[.07] px-3 py-1.5 text-[9px] uppercase tracking-[.14em] text-white/75"
+                            >
+                                <Sparkles class="size-3" /> EcoLoop pilot program
+                            </p>
+                            <h2 class="font-serif text-[clamp(2.8rem,6vw,5.5rem)] leading-[.92]">
+                                Start with one<br /><span class="italic text-[#c9d2b6]">meaningful step.</span>
+                            </h2>
+                            <p class="mt-5 max-w-[470px] text-[11px] leading-6 text-white/65">
+                                Shape the EcoLoop workflow around how your store operates. We tailor the implementation plan to your
+                                operational needs.
+                            </p>
+                        </div>
+                        <div class="reveal w-full max-w-[290px] rounded-[22px] border border-white/15 bg-white/[.08] p-5 backdrop-blur-xl">
+                            <div class="flex justify-between text-[9px] uppercase tracking-[.14em] text-white/60">
+                                <span>A phased rollout</span><Leaf class="size-4" />
+                            </div>
+                            <p class="mt-3 font-serif text-[28px]">Designed together.</p>
+                            <p class="mt-2 text-[9px] leading-4 text-white/55">Scope, integrations, and success metrics are agreed together.</p>
+                            <Link
+                                :href="primaryHref"
+                                class="mt-5 flex justify-between rounded-full bg-[#F2EEE5] px-4 py-3 text-[10px] font-semibold text-[#171512]"
+                                >{{ primaryLabel }} <ArrowUpRight class="size-4"
+                            /></Link>
+                            <p class="mt-3 text-[8px] text-white/40">Pilot pricing is discussed together and tailored to your needs</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="faq" class="px-5 py-20 sm:px-8 lg:px-12 lg:py-28">
+                <div class="mx-auto grid max-w-[1120px] gap-12 lg:grid-cols-[.72fr_1.28fr]">
+                    <div class="reveal">
+                        <p class="mb-4 text-[10px] uppercase tracking-[.18em] text-[#71805f]">Frequently asked questions</p>
+                        <h2 class="w-anim font-serif text-[clamp(2.8rem,5vw,4.6rem)] leading-[.95]">
+                            Here to<br /><span class="italic text-[#3B4B34]">help.</span>
+                        </h2>
+                        <p class="mt-5 max-w-[310px] text-[11px] leading-6 text-[#77746a]">Our team can help map a workflow that fits your needs.</p>
+                        <a href="mailto:hello@ecoloop.id" class="mt-5 inline-flex items-center gap-2 text-[10px] font-semibold text-[#3B4B34]"
+                            >Contact the EcoLoop team <ArrowUpRight class="size-3.5"
+                        /></a>
+                    </div>
+                    <div class="reveal divide-y divide-[#dcd7cb] border-y border-[#dcd7cb]">
+                        <article v-for="(faq, index) in faqs" :key="faq.question" class="py-5">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between gap-5 text-left"
+                                :aria-expanded="openFaq === index"
+                                :aria-controls="'faq-panel-' + index"
+                                @click="openFaq = openFaq === index ? -1 : index"
+                            >
+                                <span class="font-serif text-[20px] sm:text-[23px]">{{ faq.question }}</span
+                                ><span
+                                    class="grid size-8 place-items-center rounded-full border border-[#d9d5c9] text-[#3B4B34] transition-transform"
+                                    :class="{ 'rotate-180 bg-[#3B4B34] text-white': openFaq === index }"
+                                    ><ChevronDown class="size-4"
+                                /></span>
+                            </button>
+                            <div :id="'faq-panel-' + index" class="faq-body" :style="{ maxHeight: openFaq === index ? '220px' : '0px' }">
+                                <p class="max-w-[590px] pr-10 pt-3 text-[11px] leading-6 text-[#77746a]">{{ faq.answer }}</p>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+        </main>
+        <footer class="footer-gradient px-5 pb-8 pt-12 text-[#F2EEE5] sm:px-8 lg:px-12 lg:pt-16">
+            <div class="mx-auto max-w-[1320px]">
+                <div class="grid gap-10 border-b border-white/15 pb-10 md:grid-cols-[1fr_auto] md:items-end">
+                    <div>
+                        <a href="#home" class="inline-flex items-center rounded-xl bg-[#F2EEE5] px-3 py-2" aria-label="EcoLoop — back to top"><img src="/images/ecoloop-logo-light.png" alt="EcoLoop" class="h-8 w-auto max-w-[140px]" /></a>
+                        <p class="mt-4 max-w-sm text-[10px] leading-5 text-white/55">A circular system that keeps food valuable.</p>
+                    </div>
+                </div>
+                <div class="flex justify-between pt-5 text-[8px] text-white/35">
+                    <span>© {{ new Date().getFullYear() }} EcoLoop</span><span>Designed to preserve value at every step.</span>
+                </div>
+            </div>
+        </footer>
     </div>
 </template>
+<style scoped>
+.ecoloop {
+    --serif: 'Cormorant Garamond', Georgia, serif;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    scroll-behavior: smooth;
+}
+.font-serif {
+    font-family: var(--serif);
+}
+.hero-photo {
+    background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=2400&q=90');
+    background-position: center 48%;
+    background-size: cover;
+    will-change: transform;
+}
+.hero-shade {
+    background:
+        linear-gradient(90deg, rgba(16, 20, 15, 0.82), rgba(20, 24, 18, 0.67) 42%, rgba(20, 24, 18, 0.35)),
+        linear-gradient(0deg, rgba(19, 22, 17, 0.52), transparent 48%, rgba(20, 23, 18, 0.18));
+}
+.hero-glow {
+    background: radial-gradient(circle, rgba(142, 156, 117, 0.42), transparent 70%);
+    filter: blur(32px);
+}
+.proof-glow {
+    filter: blur(50px);
+}
+.proof-left {
+    background: radial-gradient(circle, rgba(142, 156, 117, 0.5), transparent 70%);
+}
+.proof-right {
+    background: radial-gradient(circle, rgba(185, 106, 74, 0.32), transparent 70%);
+}
+.grad-border {
+    position: relative;
+    isolation: isolate;
+}
+.grad-border::before {
+    position: absolute;
+    z-index: -1;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(142, 156, 117, 0.45), rgba(255, 255, 255, 0.76) 42%, rgba(185, 106, 74, 0.24));
+    content: '';
+    inset: 0;
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+.btn-lift {
+    transition:
+        transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+        box-shadow 220ms ease;
+}
+.btn-lift:hover {
+    transform: scale(1.03) translateY(-2px);
+    box-shadow: 0 12px 28px rgba(23, 21, 18, 0.16);
+}
+.reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition:
+        opacity 700ms cubic-bezier(0.2, 0.7, 0.2, 1),
+        transform 800ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.is-revealed {
+    opacity: 1;
+    transform: translateY(0);
+}
+.word-reveal {
+    display: inline-block;
+    animation: word-rise 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.feature-carousel {
+    padding-left: max(2rem, calc((100vw - 1200px) / 2 + 2rem));
+    padding-right: max(2rem, calc((100vw - 1200px) / 2 + 2rem));
+    margin-left: calc(-1 * max(1.25rem, (100vw - 1320px)/2));
+    margin-right: calc(-1 * max(1.25rem, (100vw - 1320px)/2));
+    scroll-padding-left: max(2rem, calc((100vw - 1200px) / 2 + 2rem));
+    -ms-overflow-style: none;
+}
+.feature-carousel::-webkit-scrollbar {
+    display: none;
+}
+.orbit-node {
+    animation: float-y 4.8s ease-in-out infinite;
+}
+.node-top {
+    left: 50%;
+    top: 1%;
+    transform: translateX(-50%);
+}
+.node-right-top {
+    right: 7%;
+    top: 21%;
+}
+.node-right-bottom {
+    right: 8%;
+    bottom: 13%;
+}
+.node-bottom {
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+}
+.node-left-bottom {
+    left: 7%;
+    bottom: 13%;
+}
+.node-left-top {
+    left: 7%;
+    top: 21%;
+}
+.faq-body {
+    overflow: hidden;
+    transition: max-height 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.footer-gradient {
+    background: linear-gradient(180deg, #f2eee5 0%, #3b4b34 31%, #273225 100%);
+}
+.pilot-grain {
+    background-image: radial-gradient(rgba(242, 238, 229, 0.17) 0.6px, transparent 0.6px);
+    background-size: 7px 7px;
+}
+@keyframes word-rise {
+    from {
+        opacity: 0;
+        transform: translateY(0.38em) rotate(1deg);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) rotate(0);
+    }
+}
+@keyframes float-y {
+    0%,
+    100% {
+        translate: 0 0;
+    }
+    50% {
+        translate: 0 -8px;
+    }
+}
+@media (max-width: 640px) {
+    .hero-section {
+        min-height: auto;
+    }
+    .hero-shade {
+        background:
+            linear-gradient(90deg, rgba(16, 20, 15, 0.8), rgba(20, 24, 18, 0.45)), linear-gradient(0deg, rgba(19, 22, 17, 0.48), transparent 52%);
+    }
+    .feature-carousel {
+        padding-left: 1.25rem;
+        padding-right: 1.25rem;
+        margin-left: -1.25rem;
+        margin-right: -1.25rem;
+    }
+    .node-right-top,
+    .node-right-bottom {
+        right: 0;
+    }
+    .node-left-top,
+    .node-left-bottom {
+        left: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ecoloop *,
+    .ecoloop *::before,
+    .ecoloop *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    .reveal {
+        opacity: 1;
+        transform: none;
+    }
+}
+</style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
