@@ -34,6 +34,19 @@ EcoLoop is a web platform that helps retailers manage products and inventory bat
   <br><sub>EcoLoop poster</sub>
 </div>
 
+## Account types
+
+EcoLoop has four account categories. The public registration page offers the three partner types; the system administrator account is provisioned internally and is not available for public self-registration.
+
+| Account type | Purpose | Registration |
+|:--|:--|:--|
+| **Foundation / Charity** | Receives donated products. | Available on the registration page. |
+| **MSME Partner (UMKM)** | Receives information about discounted products. | Available on the registration page. |
+| **Supermarket / Store** | Manages inventory and can offer products for donation or discount. | Available on the registration page. |
+| **System Admin (system-provisioned)** | Administers the EcoLoop platform and partner accounts. | Provisioned by the system; not shown on the public registration page. |
+
+Store owners may also grant operational access to staff through manager or cashier accounts.
+
 ## From inventory to action
 
 | Stage | What EcoLoop does |
