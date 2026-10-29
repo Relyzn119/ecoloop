@@ -309,10 +309,11 @@ class CentralInventorySyncService
         $discountApprovalsToNotify = collect();
         $automaticSchedulesToNotify = collect();
         $automationSettings = InventorySyncSetting::query()->findOrFail(1);
-        $automationManager = $automationSettings->auto_decision_activated_by
-            ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $automationSettings->auto_decision_activated_by)
-            : null;
         foreach ($demoStock['batches'] as $batch) {
+            $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $batch->product_id, $automationSettings);
+            $automationManager = $productPolicy['activated_by']
+                ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $productPolicy['activated_by'])
+                : null;
             $managerCount = $approvalService->createApprovalForBatch(
                 $batch,
                 false,
@@ -322,7 +323,7 @@ class CentralInventorySyncService
             $approvalActionCount += $managerCount;
             $approvalActionsToNotify = $approvalActionsToNotify->merge($approvalService->pendingActionsForBatch($batch->id));
             $automaticSchedulesToNotify = $automaticSchedulesToNotify->merge($approvalService->automaticScheduledActionsForBatch($batch->id));
-            if ($managerCount > 0 && $automationSettings->auto_donation_enabled) {
+            if ($managerCount > 0 && $productPolicy['auto_donation_enabled'] && $automationManager) {
                 $automaticallyDonatedEvents[] = [
                     'batch_id' => $batch->id,
                     'batch_code' => $batch->batch_code,
@@ -353,6 +354,10 @@ class CentralInventorySyncService
 
         $discountEvents = [];
         foreach ($demoStock['discount_batches'] as $batch) {
+            $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $batch->product_id, $automationSettings);
+            $automationManager = $productPolicy['activated_by']
+                ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $productPolicy['activated_by'])
+                : null;
             $approval = DiscountApproval::query()->firstOrCreate(
                 ['product_batch_id' => $batch->id, 'status' => 'pending'],
                 [
@@ -363,12 +368,13 @@ class CentralInventorySyncService
                 ]
             );
             if ($approval->wasRecentlyCreated) {
-                if ($automationSettings->auto_discount_enabled && $automationManager) {
+                if ($productPolicy['auto_discount_enabled'] && $automationManager) {
                     $approval = app(DiscountApprovalService::class)->decide(
                         $approval->id,
                         $automationManager,
                         'approve',
-                        (int) $approval->recommended_percentage
+                        (int) $approval->recommended_percentage,
+                        'automatic_inventory_policy'
                     );
                 } else {
                     $discountApprovalsToNotify->push($approval);

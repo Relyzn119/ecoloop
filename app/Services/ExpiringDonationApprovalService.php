@@ -43,6 +43,29 @@ class ExpiringDonationApprovalService
         foreach ($batches as $batch) {
             $daysRemaining = $today->diffInDays($batch->expiration_date->copy()->startOfDay(), false);
             $batchActions = $actions->get((string) $batch->id, collect());
+            $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $batch->product_id, $settings);
+
+            $scheduledAutoAction = $batchActions->first(fn (TelegramAiAction $action): bool => $action->status === 'scheduled'
+                && ($action->payload['automation_policy'] ?? false) === true);
+            if ($scheduledAutoAction) {
+                $prealertAuto = (bool) ($scheduledAutoAction->payload['prealert_auto'] ?? false);
+                $stillAutomatic = $prealertAuto
+                    ? ($productPolicy['auto_donation_prealert_enabled'] || $productPolicy['auto_donation_enabled'])
+                    : $productPolicy['auto_donation_enabled'];
+                if (! $stillAutomatic) {
+                    $payload = $scheduledAutoAction->payload ?? [];
+                    $payload['automation_policy'] = false;
+                    $payload['preapproved'] = false;
+                    $payload['prealert_auto'] = false;
+                    $payload['stage'] = $prealertAuto ? 'prealert' : 'eligible';
+                    $payload['notification_date'] = $today->toDateString();
+                    $payload['reasoning'] = 'Strategi produk diperbarui oleh manager/owner; konfirmasi manusia diperlukan sebelum donasi.';
+                    $scheduledAutoAction->update(['status' => 'pending', 'payload' => $payload]);
+                    $actionsToNotify->push($scheduledAutoAction->fresh());
+
+                    continue;
+                }
+            }
 
             if ($batchActions->isEmpty() && $daysRemaining <= 3) {
                 $created += $this->createApprovalForBatch($batch, $daysRemaining === 3, queueNotification: false);
@@ -52,7 +75,7 @@ class ExpiringDonationApprovalService
                 continue;
             }
 
-            if ($daysRemaining === 3 && $settings->auto_donation_prealert_enabled) {
+            if ($daysRemaining === 3 && $productPolicy['auto_donation_prealert_enabled']) {
                 $preAlertAction = $batchActions->first(fn (TelegramAiAction $action): bool => $action->status === 'pending'
                     && ($action->payload['stage'] ?? null) === 'prealert');
                 if ($preAlertAction) {
@@ -77,7 +100,7 @@ class ExpiringDonationApprovalService
                 continue;
             }
 
-            if ($settings->auto_donation_enabled) {
+            if ($productPolicy['auto_donation_enabled']) {
                 $pendingAction = $batchActions->first(fn (TelegramAiAction $action): bool => in_array($action->status, ['pending', 'deferred', 'awaiting_quantity'], true));
                 if ($pendingAction) {
                     $payload = $pendingAction->payload ?? [];
@@ -164,14 +187,15 @@ class ExpiringDonationApprovalService
         }
 
         $settings = InventorySyncSetting::query()->findOrFail(1);
-        $automationManager = $settings->auto_decision_activated_by
-            ? User::query()->whereIn('role', ['business_owner', 'manager'])->whereNotNull('telegram_chat_id')->find((int) $settings->auto_decision_activated_by)
+        $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $product->id, $settings);
+        $automationManager = $productPolicy['activated_by']
+            ? User::query()->whereIn('role', ['business_owner', 'manager'])->whereNotNull('telegram_chat_id')->find((int) $productPolicy['activated_by'])
             : null;
         $automaticEnabled = $preAlert
-            ? $settings->auto_donation_prealert_enabled
-            : $settings->auto_donation_enabled;
+            ? $productPolicy['auto_donation_prealert_enabled']
+            : $productPolicy['auto_donation_enabled'];
         if ($automaticEnabled && $automationManager) {
-            $action = $this->createAutomaticDonationSchedule($batch, $preAlert, $settings);
+            $action = $this->createAutomaticDonationSchedule($batch, $preAlert, $automationManager);
             if (! $action) {
                 return 0;
             }
@@ -295,9 +319,8 @@ class ExpiringDonationApprovalService
         return $created;
     }
 
-    private function createAutomaticDonationSchedule(ProductBatch $batch, bool $preAlert, InventorySyncSetting $settings): ?TelegramAiAction
+    private function createAutomaticDonationSchedule(ProductBatch $batch, bool $preAlert, User $manager): ?TelegramAiAction
     {
-        $manager = User::query()->find((int) $settings->auto_decision_activated_by);
         if (! $manager
             || ! in_array($manager->role, ['business_owner', 'manager'], true)
             || ! filled($manager->telegram_chat_id)

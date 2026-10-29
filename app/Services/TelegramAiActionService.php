@@ -4,12 +4,15 @@ namespace App\Services;
 
 use App\Models\AgentLog;
 use App\Models\InventorySyncSetting;
+use App\Models\Product;
+use App\Models\ProductAutomationPolicy;
 use App\Models\ProductBatch;
 use App\Models\TelegramAiAction;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class TelegramAiActionService
 {
@@ -63,33 +66,74 @@ class TelegramAiActionService
             ];
             $enabled = (bool) ($payload['enabled'] ?? false);
             $scopes = array_values(array_intersect((array) ($payload['scopes'] ?? []), array_keys($fields)));
-            if ($scopes === []) {
-                throw new AuthorizationException('No valid automatic policy scope was requested.');
+            $productChanges = [];
+            foreach ((array) ($payload['product_changes'] ?? []) as $change) {
+                $productId = (int) ($change['product_id'] ?? 0);
+                $productScopes = array_values(array_intersect((array) ($change['scopes'] ?? []), array_keys($fields)));
+                if ($productId < 1 || ! is_bool($change['enabled'] ?? null) || $productScopes === []) {
+                    throw new AuthorizationException('A product automation change is incomplete. No strategy was applied.');
+                }
+                $product = Product::query()->findOrFail($productId);
+                $policy = ProductAutomationPolicy::query()->lockForUpdate()->firstOrNew(['product_id' => $productId]);
+                foreach ($productScopes as $scope) {
+                    $policy->{$fields[$scope]} = $change['enabled'];
+                }
+                $policy->updated_by = $user->id;
+                $policy->save();
+                $productChanges[] = [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'sku' => $product->sku,
+                    'enabled' => $change['enabled'],
+                    'scopes' => $productScopes,
+                ];
             }
-            foreach ($scopes as $scope) {
-                $settings->{$fields[$scope]} = $enabled;
+
+            if ($productChanges === []) {
+                if ($scopes === []) {
+                    throw new AuthorizationException('No valid automatic policy scope was requested.');
+                }
+                foreach ($scopes as $scope) {
+                    $settings->{$fields[$scope]} = $enabled;
+                }
+                $anyAutomationRemainsEnabled = $settings->auto_donation_enabled
+                    || $settings->auto_discount_enabled
+                    || $settings->auto_donation_prealert_enabled;
+                if ($enabled) {
+                    $settings->auto_decision_activated_by = $user->id;
+                    $settings->auto_decision_activated_at = now();
+                } elseif (! $anyAutomationRemainsEnabled) {
+                    $settings->auto_decision_activated_by = null;
+                    $settings->auto_decision_activated_at = null;
+                }
+                $settings->save();
             }
-            $anyAutomationRemainsEnabled = $settings->auto_donation_enabled
-                || $settings->auto_discount_enabled
-                || $settings->auto_donation_prealert_enabled;
-            if ($enabled) {
-                $settings->auto_decision_activated_by = $user->id;
-                $settings->auto_decision_activated_at = now();
-            } elseif (! $anyAutomationRemainsEnabled) {
-                $settings->auto_decision_activated_by = null;
-                $settings->auto_decision_activated_at = null;
-            }
-            $settings->save();
+
+            $labelForScope = fn (string $scope): string => match ($scope) {
+                'donation' => 'donasi otomatis 0–2 hari',
+                'discount' => 'diskon AI',
+                'donation_prealert' => 'pre-alert donasi besok',
+            };
+            $scopeDescription = $productChanges !== []
+                ? collect($productChanges)->map(fn (array $change): string => sprintf(
+                    '%s [%s] %s: %s',
+                    $change['product_name'],
+                    $change['sku'],
+                    $change['enabled'] ? 'otomatis tanpa konfirmasi item' : 'kembali perlu konfirmasi',
+                    collect($change['scopes'])->map($labelForScope)->implode(', ')
+                ))->implode('; ')
+                : collect($scopes)->map($labelForScope)->implode(', ');
 
             AgentLog::query()->create([
                 // Keep action_type within the existing database enum. The specific
                 // event and affected scopes are recorded in the JSON payload.
                 'action_type' => 'manual_override',
-                'reasoning' => sprintf('Automatic inventory policy %s by %s through Telegram confirmation.', $enabled ? 'enabled' : 'disabled', $user->name),
+                'reasoning' => sprintf('Inventory automation strategy updated by %s through Telegram confirmation: %s.', $user->name, $scopeDescription),
                 'payload' => [
-                    'event' => $enabled ? 'automation_policy_enabled' : 'automation_policy_disabled',
+                    'event' => $productChanges !== [] ? 'product_automation_policy_updated' : ($enabled ? 'automation_policy_enabled' : 'automation_policy_disabled'),
                     'scopes' => $scopes,
                     'enabled' => $enabled,
+                    'product_changes' => $productChanges,
                     'actor_id' => $user->id,
                     'telegram_chat_id' => $chatId,
                 ],
@@ -100,17 +144,11 @@ class TelegramAiActionService
                 'status' => 'completed',
                 'decided_by' => $user->id,
                 'completed_at' => now(),
-                'result' => ['enabled' => $enabled, 'scopes' => $scopes],
+                'result' => ['enabled' => $enabled, 'scopes' => $scopes, 'product_changes' => $productChanges],
             ]);
 
-            $labels = collect($scopes)->map(fn (string $scope): string => match ($scope) {
-                'donation' => 'donasi 0–2 hari',
-                'discount' => 'approval diskon AI',
-                'donation_prealert' => 'pre-alert donasi besok',
-            })->implode(', ');
-
             return [
-                'text' => sprintf('Kebijakan otomatis %s berhasil untuk: %s. Pengaturan global dicatat oleh %s.', $enabled ? 'diaktifkan' : 'dinonaktifkan', $labels, $user->name),
+                'text' => sprintf('Strategi otomatis berhasil diperbarui: %s. Dikonfirmasi oleh %s.', $scopeDescription, $user->name),
                 'reply_markup' => null,
             ];
         });
@@ -370,9 +408,10 @@ class TelegramAiActionService
                 return null;
             }
             $settings = InventorySyncSetting::query()->findOrFail(1);
+            $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $action->product_id, $settings);
             $automaticScopeEnabled = ($payload['prealert_auto'] ?? false)
-                ? ($settings->auto_donation_prealert_enabled || $settings->auto_donation_enabled)
-                : $settings->auto_donation_enabled;
+                ? ($productPolicy['auto_donation_prealert_enabled'] || $productPolicy['auto_donation_enabled'])
+                : $productPolicy['auto_donation_enabled'];
             if (($payload['automation_policy'] ?? false) === true && ! $automaticScopeEnabled) {
                 $payload['stage'] = 'eligible';
                 $payload['automation_policy'] = false;
@@ -395,11 +434,31 @@ class TelegramAiActionService
             return;
         }
 
+        // Re-read the payload from the claimed action. The transaction closure
+        // above owns its local `$payload`; referring to it here yielded quantity 0.
+        $payload = $action->payload ?? [];
+        $quantity = (int) ($payload['quantity'] ?? $payload['recommended_quantity'] ?? 0);
+        if ($quantity < 1) {
+            $message = 'Jadwal donasi otomatis tidak memiliki jumlah yang valid; stok tidak diubah. Buat ulang jadwal setelah memeriksa batch.';
+            $action->update([
+                'status' => 'failed',
+                'completed_at' => now(),
+                'result' => ['success' => false, 'reason' => 'scheduled_donation_quantity_missing'],
+            ]);
+            Log::error('Scheduled EcoLoop donation has no valid quantity.', [
+                'action_id' => $action->id,
+                'product_id' => $action->product_id,
+            ]);
+            $this->notifications->queueTelegramActionResult($action->telegram_chat_id, $message, 'donation-result:'.$action->id);
+
+            return;
+        }
+
         $managerId = (int) ($action->decided_by ?? $action->requested_by);
         $result = $this->completeDonation(
             $action,
             $managerId,
-            (int) ($payload['quantity'] ?? $payload['recommended_quantity'] ?? 0),
+            $quantity,
             ($payload['stock_mode'] ?? 'reduce') === 'reduce',
             true
         );

@@ -865,9 +865,6 @@ class InventoryService
         $discountApprovalsToNotify = collect();
         $automaticSchedulesToNotify = collect();
         $automationSettings = InventorySyncSetting::query()->findOrFail(1);
-        $automationManager = $automationSettings->auto_decision_activated_by
-            ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $automationSettings->auto_decision_activated_by)
-            : null;
 
         $batches = $product->batches()
             ->where('quantity_available', '>', 0)
@@ -878,6 +875,10 @@ class InventoryService
             ->get();
 
         foreach ($batches as $batch) {
+            $productPolicy = app(ProductAutomationPolicyService::class)->forProduct((int) $product->id, $automationSettings);
+            $automationManager = $productPolicy['activated_by']
+                ? User::query()->whereIn('role', ['business_owner', 'manager'])->find((int) $productPolicy['activated_by'])
+                : null;
             $evaluationProduct = $product->replicate();
             $evaluationProduct->id = $product->id;
             $evaluationProduct->setRelation('category', $product->category);
@@ -915,7 +916,7 @@ class InventoryService
                 $processed[] = [
                     'batch_id' => $batch->id,
                     'action' => $approvalCount > 0
-                        ? ($automationSettings->auto_donation_prealert_enabled ? 'donation_prealert_auto_scheduled' : 'donation_prealert_sent')
+                        ? ($productPolicy['auto_donation_prealert_enabled'] ? 'donation_prealert_auto_scheduled' : 'donation_prealert_sent')
                         : 'donation_prealert_unavailable',
                     'eligible_on' => $batch->expiration_date->toDateString(),
                     'quantity' => $batch->quantity_available,
@@ -931,9 +932,9 @@ class InventoryService
                 $processed[] = [
                     'batch_id' => $batch->id,
                     'action' => $approvalCount > 0
-                        ? ($automationSettings->auto_donation_enabled ? 'donated_automatically' : 'awaiting_donation_approval')
+                        ? ($productPolicy['auto_donation_enabled'] ? 'donated_automatically' : 'awaiting_donation_approval')
                         : 'donation_approval_unavailable',
-                    'quantity' => $automationSettings->auto_donation_enabled
+                    'quantity' => $productPolicy['auto_donation_enabled']
                         ? (int) $batch->quantity_available
                         : (int) ($decision['recommended_donation_quantity'] ?? $batch->quantity_available),
                 ];
@@ -964,12 +965,13 @@ class InventoryService
                     ]
                 );
                 if ($approval->wasRecentlyCreated) {
-                    if ($automationSettings->auto_discount_enabled && $automationManager && $aiRecommendedDiscount) {
+                    if ($productPolicy['auto_discount_enabled'] && $automationManager && $aiRecommendedDiscount) {
                         app(DiscountApprovalService::class)->decide(
                             $approval->id,
                             $automationManager,
                             'approve',
-                            $percentage
+                            $percentage,
+                            'automatic_inventory_policy'
                         );
                     } else {
                         $discountApprovalsToNotify->push($approval);
