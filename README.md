@@ -181,7 +181,6 @@ A digital solution for more thoughtful food inventory management and better-dire
 <div align="center">
   <sub>Built with a circular mindset: see the stock, review its condition, route the next step, and keep people in control.</sub>
 </div>
-n.
 
 ---
 
