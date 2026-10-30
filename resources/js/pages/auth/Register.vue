@@ -31,11 +31,11 @@ const submit = () => {
     <AuthBase title="Daftar akun EcoLoop" description="Daftarkan Yayasan penerima donasi, UMKM penerima diskon, atau supermarket/toko pemberi donasi dan diskon. Akun menunggu persetujuan Admin EcoLoop.">
         <Head title="Daftar Mitra EcoLoop" />
 
-        <form @submit.prevent="submit" class="flex flex-col gap-6">
-            <div class="grid gap-6">
+        <form @submit.prevent="submit" class="flex w-full min-w-0 flex-col gap-6">
+            <div class="grid w-full min-w-0 gap-6">
                 <div class="grid gap-2">
                     <Label for="partner_type">Jenis mitra</Label>
-                    <select id="partner_type" v-model="form.partner_type" class="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <select id="partner_type" v-model="form.partner_type" class="h-10 w-full max-w-full truncate rounded-md border border-input bg-background px-3 text-sm">
                         <option value="foundation">Yayasan / Badan Amal — menerima produk donasi</option>
                         <option value="umkm">Mitra UMKM — menerima informasi produk diskon</option>
                         <option value="business_owner">Supermarket / Toko — Pemberi Donasi & Diskon</option>
@@ -48,7 +48,7 @@ const submit = () => {
                         :message="form.errors.organization_name"
                     />
                 </div>
-                <p class="sm:col-span-2 -mt-3 text-xs text-muted-foreground">Yayasan menerima donasi, UMKM menerima informasi diskon, dan supermarket/toko mengelola dashboard operasional stok, batch, diskon, dan donasi setelah disetujui Admin EcoLoop. Pemilik dapat memberikan akses operasional kepada staf melalui akun manager/kasir.</p>
+                <p class="-mt-3 text-xs leading-relaxed text-muted-foreground break-words">Yayasan menerima donasi, UMKM menerima informasi diskon, dan supermarket/toko mengelola dashboard operasional stok, batch, diskon, dan donasi setelah disetujui Admin EcoLoop. Pemilik dapat memberikan akses operasional kepada staf melalui akun manager/kasir.</p>
                 <div class="grid gap-2">
                     <Label for="name">Name</Label>
                     <Input id="name" type="text" required autofocus tabindex="1" autocomplete="name" v-model="form.name" placeholder="Full name" />
@@ -60,7 +60,7 @@ const submit = () => {
                     ><Input id="telegram_chat_id" required v-model="form.telegram_chat_id" placeholder="Chat ID dari bot EcoLoop" /><InputError
                         :message="form.errors.telegram_chat_id"
                     />
-                    <p class="text-xs text-muted-foreground">Untuk mendapatkan Chat ID, buka Telegram dan tekan tombol Start pada bot EcoLoopPartner_Bot terlebih dahulu. Chat ID dipakai untuk notifikasi sesuai jenis mitra.</p>
+                    <p class="text-xs text-muted-foreground break-words">Untuk mendapatkan Chat ID, buka Telegram dan tekan tombol Start pada bot EcoLoopPartner_Bot terlebih dahulu. Chat ID dipakai untuk notifikasi sesuai jenis mitra.</p>
                 </div>
 
                 <div class="grid gap-2">
