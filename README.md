@@ -18,6 +18,7 @@
 
 ---
 
+
 ## Landing page
 
 <div align="center">
@@ -33,6 +34,7 @@ EcoLoop is a web platform that helps retailers manage products and inventory bat
   <img src="docs/assets/ecoloop-poster.png" alt="EcoLoop poster: smart inventory management to reduce food waste" width="620">
   <br><sub>EcoLoop poster</sub>
 </div>
+
 
 ## Account types
 
@@ -64,7 +66,8 @@ Store owners may also grant operational access to staff through manager or cashi
 | **Laravel 12** | Application backend, inventory, business rules, approvals, audit trail, and APIs. |
 | **Vue 3 + Inertia** | Dashboard, partner portal, simulation, and user workflows. |
 | **9Router** | OpenAI-compatible gateway that forwards requests to a configured AI model, including a vision model for photo analysis. Credentials and model settings must be configured for each environment. |
-| **AI agent + Telegram** | The agent connects to a Telegram webhook for conversations and inventory follow-up. Managers can review and confirm requests that require approval. |
+| **AI agent + Telegram** | The agent connects to a Telegram webhook for conversations and inventory follow-up. Managers can review and confirm requests that require approval. 
+<a href="t.me/ecolooppartner_bot">⌯⌲ Telegram</a>|
 | **n8n** | The active VPS workflow, **EcoLoop Laravel Event Observer**, receives finalized `donation.completed` and `discount.approved` events from Laravel at `POST /webhook/ecoloop-laravel-events`, validates each event, and acknowledges valid payloads. |
 | **MySQL / SQLite** | Application storage, depending on local configuration. |
 
@@ -154,7 +157,7 @@ composer run dev
 ### Optional integrations
 
 - **9Router:** Set `NINEROUTER_API_KEY`, `NINEROUTER_BASE_URL`, `NINEROUTER_MODEL`, and `NINEROUTER_VISION_MODEL`. The configured default base URL is `http://127.0.0.1:20128/v1`; make sure it is reachable from the Laravel process.
-- **Telegram:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, configure a public HTTPS webhook, and link accounts/partners through the application workflow. Telegram Bot: t.me/EcoLoopPartner_Bot
+- **Telegram:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, configure a public HTTPS webhook, and link accounts/partners through the application workflow. 
 - **n8n:** Laravel sends finalized donation and discount events to **EcoLoop Laravel Event Observer** through `N8N_EVENT_WEBHOOK_URL` (`POST /webhook/ecoloop-laravel-events`). The workflow validates each event and returns an acknowledgement to Laravel.
 - **Queue and scheduler:** Configure a queue worker and Laravel scheduler in the deployment environment to run notifications and scheduled jobs.
 
