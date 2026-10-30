@@ -5,7 +5,8 @@
   <p>EcoLoop helps retail teams spot food nearing its expiration date, review recommendations, and route eligible products toward discounts or donations.</p>
   <p>
     <a href="https://app.ecolooppartner.my.id/">🔴 Live platform</a> &nbsp;·&nbsp;
-    <a href="https://github.com/Relyzn119/ecoloop">💻 Source code</a>
+    <a href="https://github.com/Relyzn119/ecoloop">💻 Source code</a> &nbsp;·&nbsp;
+        <a href="https://t.me/ecolooppartner_bot">⌯⌲ Ecoloop AI ChatBot</a>
   </p>
   <p>
     <img src="https://img.shields.io/badge/Laravel-12-0B3B2E?style=flat-square&logo=laravel&logoColor=F5F1E8" alt="Laravel 12">
@@ -17,7 +18,6 @@
 </div>
 
 ---
-
 
 ## Landing page
 
@@ -34,7 +34,6 @@ EcoLoop is a web platform that helps retailers manage products and inventory bat
   <img src="docs/assets/ecoloop-poster.png" alt="EcoLoop poster: smart inventory management to reduce food waste" width="620">
   <br><sub>EcoLoop poster</sub>
 </div>
-
 
 ## Account types
 
@@ -66,8 +65,7 @@ Store owners may also grant operational access to staff through manager or cashi
 | **Laravel 12** | Application backend, inventory, business rules, approvals, audit trail, and APIs. |
 | **Vue 3 + Inertia** | Dashboard, partner portal, simulation, and user workflows. |
 | **9Router** | OpenAI-compatible gateway that forwards requests to a configured AI model, including a vision model for photo analysis. Credentials and model settings must be configured for each environment. |
-| **AI agent + Telegram** | The agent connects to a Telegram webhook for conversations and inventory follow-up. Managers can review and confirm requests that require approval. 
-<a href="t.me/ecolooppartner_bot">⌯⌲ Telegram</a>|
+| **AI agent + Telegram** | The agent connects to a Telegram webhook for conversations and inventory follow-up. Managers can review and confirm requests that require approval. |
 | **n8n** | The active VPS workflow, **EcoLoop Laravel Event Observer**, receives finalized `donation.completed` and `discount.approved` events from Laravel at `POST /webhook/ecoloop-laravel-events`, validates each event, and acknowledges valid payloads. |
 | **MySQL / SQLite** | Application storage, depending on local configuration. |
 
@@ -106,7 +104,7 @@ Possible measures include batches reviewed, recommendations and approvals comple
 
 ## Demo admin account
 
-The following administrator account is provided for jury evaluation:
+The following administrator account is provided for jury evaluation :
 
 | Field | Value |
 |:--|:--|
@@ -177,6 +175,13 @@ docs/assets/           Poster asset used in this README
 **EcoLoop Team - Universitas Methodist Indonesia**
 
 A digital solution for more thoughtful food inventory management and better-directed surplus redistribution.
+
+---
+
+<div align="center">
+  <sub>Built with a circular mindset: see the stock, review its condition, route the next step, and keep people in control.</sub>
+</div>
+n.
 
 ---
 
