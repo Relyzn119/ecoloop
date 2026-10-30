@@ -154,7 +154,7 @@ composer run dev
 ### Optional integrations
 
 - **9Router:** Set `NINEROUTER_API_KEY`, `NINEROUTER_BASE_URL`, `NINEROUTER_MODEL`, and `NINEROUTER_VISION_MODEL`. The configured default base URL is `http://127.0.0.1:20128/v1`; make sure it is reachable from the Laravel process.
-- **Telegram:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, configure a public HTTPS webhook, and link accounts/partners through the application workflow.
+- **Telegram:** Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`, configure a public HTTPS webhook, and link accounts/partners through the application workflow. Telegram Bot: t.me/EcoLoopPartner_Bot
 - **n8n:** Laravel sends finalized donation and discount events to **EcoLoop Laravel Event Observer** through `N8N_EVENT_WEBHOOK_URL` (`POST /webhook/ecoloop-laravel-events`). The workflow validates each event and returns an acknowledgement to Laravel.
 - **Queue and scheduler:** Configure a queue worker and Laravel scheduler in the deployment environment to run notifications and scheduled jobs.
 
